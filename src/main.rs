@@ -6,7 +6,7 @@
 
 
 use std::env;
-use NewSpeak::{interpreter, token::TokenType};
+use NewSpeak::{interpreter, lex::TokenType};
 use std::collections::HashMap;
 
 

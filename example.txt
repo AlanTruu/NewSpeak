@@ -2,11 +2,15 @@ var x = "sigma"
 var y = 1234
 
 // loooop
-for (var i = 0; i != 10; i = i + 1) {
+for (var i = 0; i != 10.1234; i = i + 1) {
     on (x == "sigma" and y == 1234) {
-        print "ye"
+        redact "ye"
     } otherwise {
-        print "ne"
+        redact "ne"
+
+    }
+
+    while (truth) {
 
     }
 }
