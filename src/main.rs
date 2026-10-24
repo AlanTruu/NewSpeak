@@ -6,7 +6,7 @@
 
 
 use std::env;
-use NewSpeak::{interpreter, lex::TokenType};
+use NewSpeak::{grammar::print, interpreter, lex::TokenType, parser_g::Parser};
 use std::collections::HashMap;
 
 
@@ -41,9 +41,28 @@ fn main() {
 
         let (tokens, err) = interpreter::run_file(path.into(), &mut reserved);
 
+        for token in &tokens {
+            println!("{}", token)
+        }
 
-        for token in tokens {
-            println!("{:?}", token);
+        let mut p = Parser {tokens : tokens.into_iter().peekable(), current : 0};
+
+        match p.parse() {
+            Ok(expr) => {
+                let tree = print(expr);
+
+                println!("{}", tree)
+            }
+            Err(e) => eprintln!("{:?}", e)
+        }
+
+        match p.parse() {
+            Ok(expr) => {
+                let tree = print(expr);
+
+                println!("{}", tree)
+            }
+            Err(e) => eprintln!("{:?}", e)
         }
 
         for e in err {

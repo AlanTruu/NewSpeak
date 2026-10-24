@@ -93,15 +93,13 @@ pub fn scan(source : &str, reserved: &mut HashMap<&str, TokenType>) -> (Vec<Toke
 
     // Iterate source line by line, char by char
     for (line_number, line) in source.lines().enumerate() {
-        println!("{}", &line);
+
         let mut chars = line.chars().peekable();
 
         loop {
             let Some(c) = chars.next() else {
                 break;
             };
-
-            println!("After break: {}", &c);
 
             let (t, lexeme) = match c {
                 '(' => (TokenType::LeftParen, c.to_string()),
@@ -184,12 +182,9 @@ pub fn scan(source : &str, reserved: &mut HashMap<&str, TokenType>) -> (Vec<Toke
 
                     while let Some(next) = chars.peek() && next.is_ascii_alphanumeric() {
                         let ch = chars.next().unwrap();
-                        println!("Processing char: {}", &ch);
                         str.push(ch);
                     }
                     let lexeme = str.clone();
-
-                    println!("Peek at lexeme: {}", &lexeme);
 
                     if reserved.contains_key(&lexeme as &str) {
                         (reserved[&lexeme as &str].to_owned(), lexeme)

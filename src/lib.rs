@@ -37,9 +37,12 @@ mod tests {
 
     }
 }
+
 pub mod lex;
 pub mod syntax;
 pub mod grammar;
+pub mod parser;
+pub mod parser_g;
 
 pub mod interpreter {
     use std::path::PathBuf;
@@ -50,30 +53,28 @@ pub mod interpreter {
 
     #[derive(Debug)]
     pub enum NewError {
-        Syntax(usize, &'static str)
+        Syntax(usize, &'static str),
+        Parse(&'static str, Token)
     }
 
     pub fn run_file(path : PathBuf, reserved: &mut HashMap<&str, TokenType>) -> (Vec<Token>, Vec<NewError>) {
         let contents = fs::read_to_string(path).expect("Unable to read file");
-
-        println!("In run_file");
-
+        
         run(&contents, reserved)
     }
 
     pub fn run(contents : &str, reserved: &mut HashMap<&str, TokenType>) -> (Vec<Token>, Vec<NewError>) {
-        println!("In run");
-
         scan(contents, reserved)
     }
 
-    fn error(line : usize, message : &'static str) -> Result<(), NewError> {
-        report(line, "", message)
+    pub fn error(token : &Token, message : &'static str) {
+        match token.t {
+            TokenType::EOF => report(token.line, " at end ", message),
+            _ =>  report(token.line, &format!(" at '{}'", token.lexeme), message),
+        }
     }
 
-    fn report(line : usize, location : &str,  message : &'static str) -> Result<(), NewError> {
-        println!("[line {},  ] Error where {}", line, message);
-
-        Err(NewError::Syntax(line, message))
+    fn report(line : usize, location : &str,  message : &'static str) {
+        eprintln!("[line {},  ] Error {}: {}", line, location, message);
     }
 }
