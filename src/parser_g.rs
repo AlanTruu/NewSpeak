@@ -1,17 +1,65 @@
 use crate::grammar::*;
-use crate::interpreter::{NewError, error};
+use crate::interpreter_utils::{NewError, error};
 use crate::lex::{self, Token, TokenType};
-use crate::syntax::Binary;
+use crate::statement::Stmt;
 use std::iter::Peekable;
 
 pub struct Parser {
     pub tokens :  Peekable<std::vec::IntoIter<lex::Token>>,
-    pub current : usize
 }
 
 impl Parser {
-    pub fn parse(&mut self) -> Result<Expr,NewError> {
-        self.expression()
+    pub fn parse(&mut self) -> Result<Vec<Stmt>,NewError> {
+        let mut statements : Vec<Stmt> = Vec::new();
+
+        while let Some(token) = self.tokens.peek() {
+            statements.push(self.statement()?);
+        }
+
+        Ok(statements)
+    }
+
+    fn statement(&mut self) ->  Result<Stmt, NewError> {
+        if let Some(tok) = self.tokens.peek() {
+            let token = self.tokens.next().unwrap();
+
+            match token.t {
+                TokenType::Redact => {
+                    let res = self.print_statement();
+
+                    res
+                },
+                _ => self.expression_statement()
+            }
+        } else {
+            todo!()
+        }
+    }
+
+    fn print_statement(&mut self) -> Result<Stmt, NewError> {
+        let expr = self.expression()?;
+
+        if let Some(tok) = self.tokens.peek() && let TokenType::Semicolon = tok.t {
+            self.tokens.next();
+            Ok(Stmt::Print(expr))
+        } else if let Some(tok) = self.tokens.peek() {
+            Err(NewError::Syntax(tok.line, "Missing semicolon"))
+        } else {
+            Err(NewError::MissingSemicolon)
+        }
+    }
+
+    fn expression_statement(&mut self) -> Result<Stmt, NewError> {
+        let expr = self.expression()?;
+
+        if let Some(tok) = self.tokens.peek() && let TokenType::Semicolon = tok.t {
+            self.tokens.next();
+            Ok(Stmt::Expression(expr))
+        } else if let Some(tok) = self.tokens.peek() {
+            Err(NewError::Syntax(tok.line, "Missing semicolon"))
+        } else {
+            Err(NewError::MissingSemicolon)
+        }
     }
 
     fn expression(&mut self) -> Result<Expr, NewError> {
@@ -118,9 +166,11 @@ impl Parser {
             let token = self.tokens.next().unwrap();
 
             let res = match token.t {
-                TokenType::ThoughtCrime | TokenType::Truth | TokenType::Nil => Expr::Literal(token.t),
-                TokenType::Number(n) => Expr::Literal(TokenType::Number(n)),
-                TokenType::String(s) => Expr::Literal(TokenType::String(s)),
+                TokenType::ThoughtCrime => Expr::Literal(Value::Bool(false)),
+                TokenType::Truth => Expr::Literal(Value::Bool(true)),
+                TokenType::Nil => Expr::Literal(Value::Nil),
+                TokenType::Number(n) => Expr::Literal(Value::Number(n)),
+                TokenType::String(s) => Expr::Literal(Value::String(s)),
                 TokenType::LeftParen => {
                     let expr = self.expression().inspect_err(|e| {
                         if let NewError::Parse(msg, t) = e {

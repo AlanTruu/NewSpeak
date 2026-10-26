@@ -43,8 +43,9 @@ pub mod syntax;
 pub mod grammar;
 pub mod parser;
 pub mod parser_g;
+pub mod statement;
 
-pub mod interpreter {
+pub mod interpreter_utils {
     use std::path::PathBuf;
     use std::fs;
     use std::collections::HashMap;
@@ -54,12 +55,14 @@ pub mod interpreter {
     #[derive(Debug)]
     pub enum NewError {
         Syntax(usize, &'static str),
-        Parse(&'static str, Token)
+        Parse(&'static str, Token),
+        Runtime(&'static str, Token),
+        MissingSemicolon
     }
 
     pub fn run_file(path : PathBuf, reserved: &mut HashMap<&str, TokenType>) -> (Vec<Token>, Vec<NewError>) {
         let contents = fs::read_to_string(path).expect("Unable to read file");
-        
+
         run(&contents, reserved)
     }
 

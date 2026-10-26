@@ -6,7 +6,7 @@
 
 
 use std::env;
-use NewSpeak::{grammar::print, interpreter, lex::TokenType, parser_g::Parser};
+use NewSpeak::{grammar::{evaluate, print}, interpreter_utils, lex::TokenType, parser_g::Parser, statement::interpret};
 use std::collections::HashMap;
 
 
@@ -39,31 +39,25 @@ fn main() {
         reserved.insert("var", TokenType::Var);
         reserved.insert("while", TokenType::While);
 
-        let (tokens, err) = interpreter::run_file(path.into(), &mut reserved);
+        let (tokens, err) = interpreter_utils::run_file(path.into(), &mut reserved);
 
         for token in &tokens {
             println!("{}", token)
         }
 
-        let mut p = Parser {tokens : tokens.into_iter().peekable(), current : 0};
+        let mut p = Parser {tokens : tokens.into_iter().peekable()};
 
-        match p.parse() {
-            Ok(expr) => {
-                let tree = print(expr);
-
-                println!("{}", tree)
-            }
-            Err(e) => eprintln!("{:?}", e)
-        }
-
-        match p.parse() {
-            Ok(expr) => {
-                let tree = print(expr);
-
-                println!("{}", tree)
-            }
-            Err(e) => eprintln!("{:?}", e)
-        }
+//         match p.parse() {
+//             Ok(expr) => {
+//                 let tree = evaluate(&expr);
+//
+//                 println!("{:?}", tree)
+//             }
+//             Err(e) => eprintln!("{:?}", e)
+//         }
+//
+        let statements = p.parse().unwrap();
+        interpret(&statements);
 
         for e in err {
             println!("Found error {:?}", e);

@@ -3,7 +3,7 @@
 use NewSpeak::{lex::{Token, TokenType}, grammar::*};
 
 fn main() {
-    let expression = Expr::Binary { left: Box::new(Expr::Unary { operator: Token {t: TokenType::Minus , lexeme : "-".to_string(), line: 1}, right: Box::new(Expr::Literal(TokenType::Number(123.0))) }), operator: Token { t: TokenType::Star, lexeme: "*".to_string(), line: 1 }, right: Box::new(Expr::Grouping(Box::new(Expr::Literal(TokenType::Number(45.66))))) };
+    let expression = Expr::Binary { left: Box::new(Expr::Unary { operator: Token {t: TokenType::Minus , lexeme : "-".to_string(), line: 1}, right: Box::new(Expr::Literal(Value::Number(123.45))) }), operator: Token { t: TokenType::Star, lexeme: "*".to_string(), line: 1 }, right: Box::new(Expr::Grouping(Box::new(Expr::Literal(Value::Number(45.67))))) };
 
     let str = print(expression);
 

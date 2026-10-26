@@ -1,0 +1,3 @@
+redact "one";
+redact truth;
+redact 2 + 1;

@@ -1,4 +1,4 @@
-use crate::{interpreter::NewError};
+use crate::{interpreter_utils::NewError};
 use std::collections::HashMap;
 use std::fmt::{self};
 
@@ -57,7 +57,7 @@ pub enum TokenType {
     EOF
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Token {
     pub t : TokenType,
     pub lexeme : String,
@@ -83,7 +83,6 @@ impl fmt::Display for Token {
         write!(f, "Type : {:?}, Lexeme: {}", self.t,  self.lexeme)
     }
 }
-
 
 
 // scan file
