@@ -169,7 +169,7 @@ pub fn scan(source : &str, reserved: &mut HashMap<&str, TokenType>) -> (Vec<Toke
                     // use closing flag to notify user that the string literal was never closed properly
                     // no multi-line strings in this interpreter, that would be a thoughtcrime
                     if !closing {
-                        errors.push(NewError::Syntax(line_number, "Closing \" not found"));
+                        errors.push(NewError::Syntax("Closing \" not found", line_number));
                         continue
                     }
 
@@ -179,7 +179,7 @@ pub fn scan(source : &str, reserved: &mut HashMap<&str, TokenType>) -> (Vec<Toke
                 'a'..='z' | 'A'..='Z' => {
                     let mut str = String::from(c);
 
-                    while let Some(next) = chars.peek() && next.is_ascii_alphanumeric() {
+                    while let Some(next) = chars.peek() && (next.is_ascii_alphanumeric() || next == &'_') {
                         let ch = chars.next().unwrap();
                         str.push(ch);
                     }
@@ -207,7 +207,7 @@ pub fn scan(source : &str, reserved: &mut HashMap<&str, TokenType>) -> (Vec<Toke
                     if let Ok(f) = float {
                         (TokenType::Number(f), lexeme)
                     } else {
-                        errors.push(NewError::Syntax(line_number, "Not a number: "));
+                        errors.push(NewError::Syntax("Not a number: ", line_number));
                         continue
                     }
                 },
@@ -215,10 +215,10 @@ pub fn scan(source : &str, reserved: &mut HashMap<&str, TokenType>) -> (Vec<Toke
             };
 
            if let TokenType::UnexpectedChar = t {
-               errors.push(NewError::Syntax(line_number, "Unexpected character at line: "))
+               errors.push(NewError::Syntax("Unexpected character at line: ", line_number))
            }
 
-           let token = Token::new(t, lexeme, line_number);
+           let token = Token::new(t, lexeme, line_number + 1);
            tokens.push(token);
        }
     }

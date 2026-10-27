@@ -6,7 +6,7 @@
 
 
 use std::env;
-use NewSpeak::{grammar::{evaluate, print}, interpreter_utils, lex::TokenType, parser_g::Parser, statement::interpret};
+use NewSpeak::{grammar::{print}, interpreter_utils, lex::TokenType, parser_g::Parser, statement::{Environment}};
 use std::collections::HashMap;
 
 
@@ -57,7 +57,10 @@ fn main() {
 //         }
 //
         let statements = p.parse().unwrap();
-        interpret(&statements);
+
+        let mut env = Environment {values : HashMap::new()};
+
+        env.interpret(&statements);
 
         for e in err {
             println!("Found error {:?}", e);

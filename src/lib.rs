@@ -54,10 +54,11 @@ pub mod interpreter_utils {
 
     #[derive(Debug)]
     pub enum NewError {
-        Syntax(usize, &'static str),
+        Syntax(&'static str, usize),
         Parse(&'static str, Token),
         Runtime(&'static str, Token),
-        MissingSemicolon
+        FillInSemicolon,
+        FillInStatement
     }
 
     pub fn run_file(path : PathBuf, reserved: &mut HashMap<&str, TokenType>) -> (Vec<Token>, Vec<NewError>) {
@@ -78,6 +79,6 @@ pub mod interpreter_utils {
     }
 
     fn report(line : usize, location : &str,  message : &'static str) {
-        eprintln!("[line {},  ] Error {}: {}", line, location, message);
+        eprintln!("[line {}] Error {}: {}", line, location, message);
     }
 }

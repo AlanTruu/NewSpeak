@@ -1,3 +1,6 @@
+redact "hi";
 redact "one";
 redact truth;
-redact 2 + 1;
+var num_1 = 6;
+var num_2;
+var num_3;

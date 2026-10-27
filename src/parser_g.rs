@@ -1,4 +1,4 @@
-use crate::grammar::*;
+use crate::{grammar::*, statement};
 use crate::interpreter_utils::{NewError, error};
 use crate::lex::{self, Token, TokenType};
 use crate::statement::Stmt;
@@ -13,7 +13,16 @@ impl Parser {
         let mut statements : Vec<Stmt> = Vec::new();
 
         while let Some(token) = self.tokens.peek() {
-            statements.push(self.statement()?);
+            let statement_or_err = self.declaration();
+
+            match statement_or_err {
+                Ok(statement) => statements.push(statement),
+                Err(NewError::Parse(msg, t)) => {
+                    error(&t, msg);
+                    self.synchronize();
+                },
+                _ => self.synchronize(),
+            }
         }
 
         Ok(statements)
@@ -27,7 +36,12 @@ impl Parser {
                 TokenType::Redact => {
                     let res = self.print_statement();
 
-                    res
+                    match res {
+                        Ok(statement) => Ok(statement),
+                        Err(NewError::Parse(msg, token)) => Err(NewError::Parse(msg, token)),
+                        Err(NewError::FillInSemicolon) => Err(NewError::Parse("Missing semicolon", token)),
+                        _ => unreachable!()
+                    }
                 },
                 _ => self.expression_statement()
             }
@@ -43,9 +57,53 @@ impl Parser {
             self.tokens.next();
             Ok(Stmt::Print(expr))
         } else if let Some(tok) = self.tokens.peek() {
-            Err(NewError::Syntax(tok.line, "Missing semicolon"))
+            Err(NewError::Parse("Missing semicolon", tok.clone()))
         } else {
-            Err(NewError::MissingSemicolon)
+            Err(NewError::FillInSemicolon)
+        }
+    }
+
+    fn declaration(&mut self) -> Result<Stmt, NewError> {
+        if let Some(token) = self.tokens.peek() && let TokenType::Var = token.t {
+            let token = self.tokens.next().unwrap();
+
+            match self.var_declaration() {
+                Ok(statement) => Ok(statement),
+                Err(NewError::FillInStatement) => Err(NewError::Parse("Missing identifier", token)),
+                Err(e) => Err(e),
+                _=> unreachable!()
+            }
+        } else {
+            self.statement()
+        }
+    }
+
+    fn var_declaration(&mut self) -> Result<Stmt, NewError> {
+        let (id_or_none, equal_or_none) = (self.tokens.next_if(|tok| if let TokenType::Identifier(_) = tok.t {true} else {false}), self.tokens.next_if(|tok| if let TokenType::Equal = tok.t {true} else {false} ));
+
+        match (id_or_none, equal_or_none) {
+            (Some(token_id), Some(_)) => {
+                let expr = self.expression()?;
+
+                let semicolon = self.tokens.next_if(|tok| if let TokenType::Semicolon = tok.t {true} else {false});
+
+                if let Some(_) = semicolon {
+                    Ok(Stmt::Var { name: token_id, initializer: Some(expr) })
+                } else {
+                    Err(NewError::Parse("Expected semicolon", token_id))
+                }
+            },
+            (Some(token_id), None) => {
+                let semicolon = self.tokens.next_if(|tok| if let TokenType::Semicolon = tok.t {true} else {false});
+
+                if let Some(_) = semicolon {
+                    Ok(Stmt::Var { name: token_id, initializer: None })
+                } else {
+                    Err(NewError::Parse("Expected semicolon", token_id))
+                }
+            },
+            _ => Err(NewError::FillInStatement)
+
         }
     }
 
@@ -56,9 +114,10 @@ impl Parser {
             self.tokens.next();
             Ok(Stmt::Expression(expr))
         } else if let Some(tok) = self.tokens.peek() {
-            Err(NewError::Syntax(tok.line, "Missing semicolon"))
+            Err(NewError::Parse("Missing semicolon", tok.clone()))
         } else {
-            Err(NewError::MissingSemicolon)
+            // if there is no token available, defer error type to calling function
+            Err(NewError::FillInSemicolon)
         }
     }
 
@@ -162,15 +221,16 @@ impl Parser {
     }
 
     fn primary(&mut self) -> Result<Expr, NewError> {
-        if let Some(token) = self.tokens.peek() {
+        if let Some(_token) = self.tokens.peek() {
             let token = self.tokens.next().unwrap();
 
-            let res = match token.t {
+            let res = match &token.t {
                 TokenType::ThoughtCrime => Expr::Literal(Value::Bool(false)),
                 TokenType::Truth => Expr::Literal(Value::Bool(true)),
                 TokenType::Nil => Expr::Literal(Value::Nil),
-                TokenType::Number(n) => Expr::Literal(Value::Number(n)),
-                TokenType::String(s) => Expr::Literal(Value::String(s)),
+                TokenType::Number(n) => Expr::Literal(Value::Number(n.to_owned())),
+                TokenType::String(s) => Expr::Literal(Value::String(s.to_owned())),
+                TokenType::Identifier(i) => Expr::Variable(token),
                 TokenType::LeftParen => {
                     let expr = self.expression().inspect_err(|e| {
                         if let NewError::Parse(msg, t) = e {
@@ -189,7 +249,8 @@ impl Parser {
 
 
                     Expr::Grouping(Box::new(expr))
-                }
+                },
+
                 _ => return Err(NewError::Parse("Not a valid primary", token))
             };
 
