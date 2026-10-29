@@ -4,6 +4,10 @@ use crate::{grammar::Expr::Literal, interpreter_utils::NewError::{self, Runtime}
 
 #[derive(Debug)]
 pub enum Expr {
+    Assign {
+        name : Token,
+        val : Box<Expr>
+    },
     Binary {
         left : Box<Expr>,
         operator : Token,

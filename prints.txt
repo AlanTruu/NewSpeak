@@ -3,4 +3,5 @@ redact "one";
 redact truth;
 var num_1 = 6;
 var num_2;
-var num_3;
+num_2 = 7;
+redact num_1 + num_2;

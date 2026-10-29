@@ -1,15 +1,80 @@
 use crate::grammar::{Expr, Value, is_equal, is_truthy};
-// use crate::grammar::evaluate;
 use crate::lex::Token;
 use crate::interpreter_utils::{NewError, NewError::Runtime};
-use std::collections::HashMap;
 use crate::lex::TokenType;
+use std::collections::HashMap;
+use std::rc::Rc;
+use std::cell::RefCell;
 
-pub struct Environment<'a> {
-    pub values : HashMap<&'a str, Value>
+pub struct Interpreter {
+
 }
 
-impl<'a> Environment<'a> {
+impl Interpreter {
+    pub fn execute(&self, env : Rc<RefCell<Environment>>, stmt : &Stmt) {
+        match stmt {
+            Stmt::Print(expr) => {
+                match env.borrow_mut().evaluate(expr) {
+                    Ok(val) => {
+                        match val {
+                            Value::Bool(false) => println!("thoughtCrime"),
+                            Value::Bool(true) => println!("truth"),
+                            Value::Number(n) => println!("{}", n),
+                            Value::String(s) => println!("{}", s),
+                            Value::Identifier(i) => println!("{}", i),
+                            Value::Nil => println!("nil")
+                        }
+                    },
+                    Err(e) => eprintln!("{:?}", e)
+                }
+            },
+            Stmt::Expression(expr) => {
+                match env.borrow_mut().evaluate(expr) {
+                    Ok(v) => {
+
+                    },
+                    Err(e) => eprintln!("{:?}", e),
+                    _ => todo!()
+                }
+            },
+            Stmt::Var { name, initializer : Some(initializer) } => {
+                let val = env.borrow_mut().evaluate(initializer);
+
+                match val {
+                    Ok(val) => env.borrow_mut().define(&name.lexeme, val),
+                    Err(e) => eprintln!("{:?}", e)
+                }
+            },
+            Stmt::Var { name, initializer : None } => {
+                env.borrow_mut().define(&name.lexeme, Value::Nil);
+            },
+            Stmt::Block(statements) => {
+                let outer = Some(Rc::clone(&env));
+
+                let inner_env = Environment {
+                    values : HashMap::new(),
+                    enclosing : outer
+                };
+
+                self.interpret(Rc::new(RefCell::new(inner_env)), statements);
+            },
+            _ => todo!()
+        }
+    }
+
+    pub fn interpret(&self, env : Rc<RefCell<Environment>>, statements : &[Stmt]) {
+        for statement in statements {
+            self.execute(env.clone(), statement);
+        }
+    }
+}
+
+pub struct Environment {
+    pub values : HashMap<String, Value>,
+    pub enclosing :  Option<Rc<RefCell<Environment>>>
+}
+
+impl Environment {
     pub fn evaluate(&mut self, e : &Expr) -> Result<Value, NewError> {
         match e {
             Expr::Literal(Value::Nil) => Ok(Value::Nil),
@@ -81,74 +146,106 @@ impl<'a> Environment<'a> {
                     }
                 }
             },
-            Expr::Variable(v) => Ok(self.get(v)?.clone())
+            Expr::Variable(v) => Ok(self.get(v)?.clone()),
+            Expr::Assign { name, val } => {
+                let val = self.evaluate(&val)?;
+
+                self.assign(name, val.clone())?;
+
+                Ok(val)
+            }
         }
     }
 
-    fn define(&mut self, name : &'a str, value : Value) {
-        self.values.insert(name, value);
+    fn define(&mut self, name : &str, value : Value) {
+        self.values.insert(name.into(), value);
     }
 
-    fn get(&self, name : &Token) -> Result<&Value, NewError> {
+    fn assign(&mut self, name : &Token, value : Value) -> Result<(), NewError> {
+        if self.values.contains_key(&name.lexeme as &str) {
+            self.values.insert(name.lexeme.clone(), value);
+            Ok(())
+        } else if let Some(enclosing) = &mut self.enclosing {
+            enclosing.borrow_mut().assign(name, value)
+        } else {
+            Err(NewError::Runtime("Undefined variable", name.clone()))
+        }
+    }
+
+    fn get(&self, name : &Token) -> Result<Value, NewError> {
         let val_or_none = self.values.get(&name.lexeme as &str);
 
         match val_or_none {
-            Some(val) => Ok(val),
-            None => Err(NewError::Runtime("Undefined variable", name.clone()))
-        }
-    }
+            Some(val) => Ok(val.clone()),
+            None => {
+                if let Some(enclosing) = &self.enclosing {
+                   let Ok(val) = enclosing.borrow_mut().get(name) else {
+                       return Err(NewError::Runtime("Undefined variable", name.clone()))
+                   };
 
-    pub fn execute(&mut self, stmt : &'a Stmt) {
-        match stmt {
-            Stmt::Print(expr) => {
-                match self.evaluate(expr) {
-                    Ok(val) => {
-                        match val {
-                            Value::Bool(false) => println!("thoughtCrime"),
-                            Value::Bool(true) => println!("truth"),
-                            Value::Number(n) => println!("{}", n),
-                            Value::String(s) => println!("{}", s),
-                            Value::Identifier(i) => println!("{}", i),
-                            Value::Nil => println!("nil")
-                        }
-                    },
-                    Err(e) => eprintln!("{:?}", e)
+                   Ok(val)
+                } else {
+                    Err(NewError::Runtime("Undefined variable", name.clone()))
                 }
-            },
-            Stmt::Expression(expr) => {
-                match self.evaluate(expr) {
-                    Ok(v) => {
-
-                    },
-                    Err(e) => eprintln!("{:?}", e),
-                    _ => todo!()
-                }
-            },
-            Stmt::Var { name, initializer : Some(initializer) } => {
-                let val = self.evaluate(initializer);
-
-                match val {
-                    Ok(val) => self.define(&name.lexeme, val),
-                    Err(e) => eprintln!("{:?}", e)
-                }
-            },
-            Stmt::Var { name, initializer : None } => {
-                self.define(&name.lexeme, Value::Nil);
             }
-            _ => todo!()
         }
     }
 
-    pub fn interpret(&mut self, statements : &'a[Stmt]) {
-        for statement in statements {
-            self.execute(statement);
-        }
-    }
+//     pub fn execute(&mut self, stmt : &Stmt) {
+//         match stmt {
+//             Stmt::Print(expr) => {
+//                 match self.evaluate(expr) {
+//                     Ok(val) => {
+//                         match val {
+//                             Value::Bool(false) => println!("thoughtCrime"),
+//                             Value::Bool(true) => println!("truth"),
+//                             Value::Number(n) => println!("{}", n),
+//                             Value::String(s) => println!("{}", s),
+//                             Value::Identifier(i) => println!("{}", i),
+//                             Value::Nil => println!("nil")
+//                         }
+//                     },
+//                     Err(e) => eprintln!("{:?}", e)
+//                 }
+//             },
+//             Stmt::Expression(expr) => {
+//                 match self.evaluate(expr) {
+//                     Ok(v) => {
+// 
+//                     },
+//                     Err(e) => eprintln!("{:?}", e),
+//                     _ => todo!()
+//                 }
+//             },
+//             Stmt::Var { name, initializer : Some(initializer) } => {
+//                 let val = self.evaluate(initializer);
+// 
+//                 match val {
+//                     Ok(val) => self.define(&name.lexeme, val),
+//                     Err(e) => eprintln!("{:?}", e)
+//                 }
+//             },
+//             Stmt::Var { name, initializer : None } => {
+//                 self.define(&name.lexeme, Value::Nil);
+//             },
+//             Stmt::Block(statements) => {
+// 
+//             }
+//             _ => todo!()
+//         }
+//     }
+// 
+//     pub fn interpret(&mut self, statements : &[Stmt]) {
+//         for statement in statements {
+//             self.execute(statement);
+//         }
+//     }
 }
 
 pub enum Stmt {
     Print(Expr),
     Expression(Expr),
+    Block(Vec<Stmt>),
     If(Expr),
     Var {
         name : Token,

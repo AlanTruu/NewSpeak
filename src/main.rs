@@ -5,8 +5,8 @@
 */
 
 
-use std::env;
-use NewSpeak::{grammar::{print}, interpreter_utils, lex::TokenType, parser_g::Parser, statement::{Environment}};
+use std::{cell::RefCell, env, rc::Rc};
+use NewSpeak::{grammar::print, interpreter_utils, lex::TokenType, parser_g::Parser, statement::{Environment, Interpreter}};
 use std::collections::HashMap;
 
 
@@ -47,20 +47,13 @@ fn main() {
 
         let mut p = Parser {tokens : tokens.into_iter().peekable()};
 
-//         match p.parse() {
-//             Ok(expr) => {
-//                 let tree = evaluate(&expr);
-//
-//                 println!("{:?}", tree)
-//             }
-//             Err(e) => eprintln!("{:?}", e)
-//         }
-//
         let statements = p.parse().unwrap();
 
-        let mut env = Environment {values : HashMap::new()};
+        let env = Environment {values : HashMap::new(), enclosing : None};
 
-        env.interpret(&statements);
+        let interpreter = Interpreter {};
+
+        interpreter.interpret(Rc::new(RefCell::new(env)), &statements);
 
         for e in err {
             println!("Found error {:?}", e);

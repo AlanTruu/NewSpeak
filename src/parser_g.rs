@@ -28,41 +28,6 @@ impl Parser {
         Ok(statements)
     }
 
-    fn statement(&mut self) ->  Result<Stmt, NewError> {
-        if let Some(tok) = self.tokens.peek() {
-            let token = self.tokens.next().unwrap();
-
-            match token.t {
-                TokenType::Redact => {
-                    let res = self.print_statement();
-
-                    match res {
-                        Ok(statement) => Ok(statement),
-                        Err(NewError::Parse(msg, token)) => Err(NewError::Parse(msg, token)),
-                        Err(NewError::FillInSemicolon) => Err(NewError::Parse("Missing semicolon", token)),
-                        _ => unreachable!()
-                    }
-                },
-                _ => self.expression_statement()
-            }
-        } else {
-            todo!()
-        }
-    }
-
-    fn print_statement(&mut self) -> Result<Stmt, NewError> {
-        let expr = self.expression()?;
-
-        if let Some(tok) = self.tokens.peek() && let TokenType::Semicolon = tok.t {
-            self.tokens.next();
-            Ok(Stmt::Print(expr))
-        } else if let Some(tok) = self.tokens.peek() {
-            Err(NewError::Parse("Missing semicolon", tok.clone()))
-        } else {
-            Err(NewError::FillInSemicolon)
-        }
-    }
-
     fn declaration(&mut self) -> Result<Stmt, NewError> {
         if let Some(token) = self.tokens.peek() && let TokenType::Var = token.t {
             let token = self.tokens.next().unwrap();
@@ -75,6 +40,37 @@ impl Parser {
             }
         } else {
             self.statement()
+        }
+    }
+
+    fn statement(&mut self) ->  Result<Stmt, NewError> {
+        if let Some(tok) = self.tokens.next_if(|tok| if let TokenType::Redact = tok.t {true} else {false}) {
+            let res = self.print_statement();
+
+            match res {
+                Ok(statement) => Ok(statement),
+                Err(NewError::Parse(msg, token)) => Err(NewError::Parse(msg, token)),
+                Err(NewError::FillInSemicolon) => Err(NewError::Parse("Missing semicolon", tok.clone())),
+                _=> unreachable!()
+            }
+        } else if let Some(tok) = self.tokens.peek() && let TokenType::LeftBrace = tok.t {
+            Ok(Stmt::Block(self.block()?))
+        } else {
+            self.expression_statement()
+        }
+
+    }
+
+    fn print_statement(&mut self) -> Result<Stmt, NewError> {
+        let expr = self.expression()?;
+
+        if let Some(tok) = self.tokens.peek() && let TokenType::Semicolon = tok.t {
+            self.tokens.next();
+            Ok(Stmt::Print(expr))
+        } else if let Some(tok) = self.tokens.peek() {
+            Err(NewError::Parse("Missing semicolon", tok.clone()))
+        } else {
+            Err(NewError::FillInSemicolon)
         }
     }
 
@@ -121,16 +117,56 @@ impl Parser {
         }
     }
 
+    fn block(&mut self) -> Result<Vec<Stmt>, NewError>{
+        // consume left brace
+        let left_brace = self.tokens.next().unwrap();
+
+        let mut statements : Vec<Stmt> = Vec::new();
+
+        while let Some(token) = self.tokens.peek() {
+            if let TokenType::RightBrace = token.t {
+                break
+            }
+
+            statements.push(self.declaration()?);
+        }
+
+        let Some(_right_brace) = self.tokens.next_if(|tok| if let TokenType::RightBrace = tok.t {true} else {false}) else {
+            return Err(NewError::Parse("Missing closing }", left_brace))
+        };
+
+        Ok(statements)
+    }
+
+    // fn expression(&mut self) -> Result<Expr, NewError> {
+    //     self.equality()
+    // }
+
     fn expression(&mut self) -> Result<Expr, NewError> {
-        self.equality()
+        self.assignment()
+    }
+
+    fn assignment(&mut self) -> Result<Expr, NewError> {
+        let expr = self.equality()?;
+
+        if let Some(token) = self.tokens.peek() && let TokenType::Equal = token.t {
+            let _equals = self.tokens.next().unwrap();
+
+            let val = self.assignment()?;
+
+            match expr {
+                Expr::Variable(name) => {
+                    Ok(Expr::Assign { name, val : Box::new(val) })
+                },
+                _ => Err(NewError::Assignment)
+            }
+        } else {
+            Ok(expr)
+        }
     }
 
     fn equality(&mut self) -> Result<Expr, NewError> {
-        let mut expr = self.comparison().inspect_err(|e| {
-            if let NewError::Parse(msg, t) = e {
-                error(&t, msg);
-            }
-        })?;
+        let mut expr = self.comparison()?;
 
         // peek next token to see if its != or ==
         while let Some(token) = self.tokens.peek() {
@@ -230,7 +266,7 @@ impl Parser {
                 TokenType::Nil => Expr::Literal(Value::Nil),
                 TokenType::Number(n) => Expr::Literal(Value::Number(n.to_owned())),
                 TokenType::String(s) => Expr::Literal(Value::String(s.to_owned())),
-                TokenType::Identifier(i) => Expr::Variable(token),
+                TokenType::Identifier(i) => Expr::Variable(token) ,
                 TokenType::LeftParen => {
                     let expr = self.expression().inspect_err(|e| {
                         if let NewError::Parse(msg, t) = e {
@@ -243,7 +279,6 @@ impl Parser {
                     };
 
                     let TokenType::RightParen = tok.t else {
-                        println!("{:?}", &expr);
                         return Err(NewError::Parse("Could not find right parantheses", token))
                     };
 
@@ -251,7 +286,8 @@ impl Parser {
                     Expr::Grouping(Box::new(expr))
                 },
 
-                _ => return Err(NewError::Parse("Not a valid primary", token))
+                _ =>  return Err(NewError::Parse("Not a valid primary", token))
+
             };
 
             Ok(res)

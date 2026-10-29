@@ -58,7 +58,9 @@ pub mod interpreter_utils {
         Parse(&'static str, Token),
         Runtime(&'static str, Token),
         FillInSemicolon,
-        FillInStatement
+        FillInStatement,
+        FillInBlock,
+        Assignment
     }
 
     pub fn run_file(path : PathBuf, reserved: &mut HashMap<&str, TokenType>) -> (Vec<Token>, Vec<NewError>) {
