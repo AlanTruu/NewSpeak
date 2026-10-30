@@ -58,17 +58,45 @@ impl Interpreter {
 
                 self.interpret(Rc::new(RefCell::new(inner_env)), statements);
             },
+            Stmt::If { condition, on, otherwise } => {
+
+                let Ok(val) = env.borrow_mut().evaluate(condition) else {
+                    panic!("Could not evaluate on condition")
+                };
+
+                if is_truthy(&val) {
+                    self.execute(env, on);
+                } else if let Some(otherwise_expr) = otherwise {
+                    self.execute(env, otherwise_expr);
+                }
+            },
+            Stmt::While { condition, body } => {
+                loop {
+
+                    if let Ok(val) = env.borrow_mut().evaluate(&condition) {
+                        if !is_truthy(&val) {
+                            break
+                        }
+                    } else {
+                        break
+                    }
+
+                    self.execute(Rc::clone(&env), body);
+
+                }
+            }
             _ => todo!()
         }
     }
 
     pub fn interpret(&self, env : Rc<RefCell<Environment>>, statements : &[Stmt]) {
         for statement in statements {
-            self.execute(env.clone(), statement);
+            self.execute(Rc::clone(&env), statement);
         }
     }
 }
 
+#[derive(Debug)]
 pub struct Environment {
     pub values : HashMap<String, Value>,
     pub enclosing :  Option<Rc<RefCell<Environment>>>
@@ -92,7 +120,7 @@ impl Environment {
                 } else if let TokenType::Minus = operator.t {
                     Err(NewError::Runtime("Operand must be a number", operator.clone()))
                 } else if let TokenType::Bang = operator.t {
-                    Ok(Value::Bool(!is_truthy(right)))
+                    Ok(Value::Bool(!is_truthy(&right)))
                 } else {
                     Ok(right)
                 }
@@ -153,6 +181,22 @@ impl Environment {
                 self.assign(name, val.clone())?;
 
                 Ok(val)
+            },
+            Expr::Logical { left, operator, right } => {
+                let left = self.evaluate(left)?;
+
+                // short circuiting
+                if let TokenType::Or = operator.t {
+                    if is_truthy(&left) {
+                        return Ok(left)
+                    }
+                } else {
+                    if !is_truthy(&left) {
+                        return Ok(left)
+                    }
+                }
+
+                self.evaluate(right)
             }
         }
     }
@@ -211,7 +255,7 @@ impl Environment {
 //             Stmt::Expression(expr) => {
 //                 match self.evaluate(expr) {
 //                     Ok(v) => {
-// 
+//
 //                     },
 //                     Err(e) => eprintln!("{:?}", e),
 //                     _ => todo!()
@@ -219,7 +263,7 @@ impl Environment {
 //             },
 //             Stmt::Var { name, initializer : Some(initializer) } => {
 //                 let val = self.evaluate(initializer);
-// 
+//
 //                 match val {
 //                     Ok(val) => self.define(&name.lexeme, val),
 //                     Err(e) => eprintln!("{:?}", e)
@@ -229,12 +273,12 @@ impl Environment {
 //                 self.define(&name.lexeme, Value::Nil);
 //             },
 //             Stmt::Block(statements) => {
-// 
+//
 //             }
 //             _ => todo!()
 //         }
 //     }
-// 
+//
 //     pub fn interpret(&mut self, statements : &[Stmt]) {
 //         for statement in statements {
 //             self.execute(statement);
@@ -246,9 +290,17 @@ pub enum Stmt {
     Print(Expr),
     Expression(Expr),
     Block(Vec<Stmt>),
-    If(Expr),
+    If {
+        condition : Expr,
+        on : Box<Stmt>,
+        otherwise : Option<Box<Stmt>>,
+    },
     Var {
         name : Token,
         initializer : Option<Expr>
+    },
+    While {
+        condition : Expr,
+        body : Box<Stmt>
     }
 }

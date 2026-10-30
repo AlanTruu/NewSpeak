@@ -38,6 +38,7 @@ fn main() {
         reserved.insert("truth", TokenType::Truth);
         reserved.insert("var", TokenType::Var);
         reserved.insert("while", TokenType::While);
+        reserved.insert("break", TokenType::Break);
 
         let (tokens, err) = interpreter_utils::run_file(path.into(), &mut reserved);
 

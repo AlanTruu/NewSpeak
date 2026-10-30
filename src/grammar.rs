@@ -19,7 +19,12 @@ pub enum Expr {
     },
     Grouping(Box<Expr>),
     Literal(Value),
-    Variable(Token)
+    Variable(Token),
+    Logical {
+        left : Box<Expr>,
+        operator : Token,
+        right : Box<Expr>
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -131,7 +136,7 @@ pub fn is_equal(left : &Value, right : &Value) -> bool {
     }
 }
 
-pub fn is_truthy(val : Value) -> bool {
+pub fn is_truthy(val : &Value) -> bool {
     match val {
         Value::Nil | Value::Bool(false) => false,
         _ => true

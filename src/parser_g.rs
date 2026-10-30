@@ -30,13 +30,14 @@ impl Parser {
 
     fn declaration(&mut self) -> Result<Stmt, NewError> {
         if let Some(token) = self.tokens.peek() && let TokenType::Var = token.t {
+
+            // consume var keyword
             let token = self.tokens.next().unwrap();
 
             match self.var_declaration() {
                 Ok(statement) => Ok(statement),
                 Err(NewError::FillInStatement) => Err(NewError::Parse("Missing identifier", token)),
                 Err(e) => Err(e),
-                _=> unreachable!()
             }
         } else {
             self.statement()
@@ -55,10 +56,135 @@ impl Parser {
             }
         } else if let Some(tok) = self.tokens.peek() && let TokenType::LeftBrace = tok.t {
             Ok(Stmt::Block(self.block()?))
+        } else if let Some(tok) = self.tokens.peek() && let TokenType::On = tok.t {
+            self.if_statement()
+        } else if let Some(tok) = self.tokens.peek() && let TokenType::While = tok.t {
+            self.while_statement()
+        } else if let Some(tok) = self.tokens.peek() && let TokenType::For = tok.t {
+            self.for_statement()
         } else {
             self.expression_statement()
         }
+    }
 
+    fn for_statement(&mut self) -> Result<Stmt, NewError> {
+        // consume for keyword
+        let for_token = self.tokens.next().unwrap();
+
+        let Some(_left_paren) = self.tokens.next_if(|tok| if let TokenType::LeftParen = tok.t {true} else {false}) else {
+            return Err(NewError::Parse("Missing '(' after 'for'", for_token))
+        };
+
+        let Some(tok) = self.tokens.peek() else {
+            return Err(NewError::Parse("Missing expression after 'for'", for_token))
+        };
+
+        let initializer = match tok.t {
+            TokenType::Semicolon => {
+                // consume semicolon
+                self.tokens.next().unwrap();
+                None
+            },
+            TokenType::Var => {
+                // consume var keyword
+                self.tokens.next().unwrap();
+                Some(self.var_declaration()?)
+            },
+            _=> Some(self.expression_statement()?)
+        };
+
+        let Some(tok) = self.tokens.peek() else {
+            return Err(NewError::Parse("Missing expression after 'for'", for_token))
+        };
+
+        let condition = match tok.t {
+            TokenType::Semicolon => {
+                None
+            },
+            _ => Some(self.expression()?)
+        };
+
+        // consume semicolon
+        let Some(_) = self.tokens.next_if(|tok| if let TokenType::Semicolon = tok.t {true} else {false}) else {
+            return Err(NewError::Parse("Expected ; after loop condition", for_token))
+        };
+
+        let Some(tok) = self.tokens.peek() else {
+            return Err(NewError::Parse("Incomplete 'for' statement", for_token))
+        };
+
+        let increment = match tok.t {
+            TokenType::RightParen => {
+                None
+            },
+            _ => Some(self.expression()?)
+        };
+
+        let Some(_) = self.tokens.next_if(|tok| if let TokenType::RightParen = tok.t {true} else {false}) else {
+            return Err(NewError::Parse("Expected ; after loop condition", for_token))
+        };
+
+        let mut body = self.statement()?;
+
+        if let Some(increment) = increment {
+            body = Stmt::Block(vec![body, Stmt::Expression(increment)]);
+        }
+
+        if let Some(condition) = condition {
+            body = Stmt::While { condition, body : Box::new(body) };
+        } else {
+            body = Stmt::While { condition: Expr::Literal(Value::Bool(true)), body : Box::new(body) };
+        }
+
+        if let Some(initializer) = initializer {
+            body = Stmt::Block(vec![initializer, body]);
+        }
+
+        Ok(body)
+    }
+
+    fn while_statement(&mut self) -> Result<Stmt, NewError> {
+        // consume while keyword
+        let while_token = self.tokens.next().unwrap();
+
+        let Some(_left_paren) = self.tokens.next_if(|tok| if let TokenType::LeftParen = tok.t {true} else {false}) else {
+            return Err(NewError::Parse("Expected '(' after 'while'", while_token))
+        };
+
+        let condition = self.expression()?;
+
+        let Some(_right_paren) = self.tokens.next_if(|tok| if let TokenType::RightParen = tok.t {true} else {false}) else {
+            return Err(NewError::Parse("Expected ')' after condition", while_token))
+        };
+
+        let body = self.statement()?;
+
+        Ok(Stmt::While { condition, body : Box::new(body) })
+    }
+
+    fn if_statement(&mut self) -> Result<Stmt, NewError> {
+        // consume on keyword
+        self.tokens.next().unwrap();
+
+        let Some(_left_paren) = self.tokens.next_if(|tok| if let TokenType::LeftParen = tok.t {true} else {false}) else {
+            panic!("Expected '(' after on")
+        };
+
+        let cond = self.expression()?;
+
+        let Some(_right_paren) = self.tokens.next_if(|tok| if let TokenType::RightParen = tok.t {true} else {false}) else {
+            panic!("Expected ')' after on condition")
+        };
+
+        let on_branch = self.statement()?;
+
+        if let Some(_otherwise_token) = self.tokens.next_if(|tok| if let TokenType::Otherwise = tok.t {true} else {false}) {
+            let otherwise_branch = self.statement()?;
+
+            Ok(Stmt::If { condition: cond, on: Box::new(on_branch), otherwise: Some(Box::new(otherwise_branch)) })
+        } else {
+            Ok(Stmt::If { condition: cond, on: Box::new(on_branch), otherwise: None })
+        }
     }
 
     fn print_statement(&mut self) -> Result<Stmt, NewError> {
@@ -138,16 +264,12 @@ impl Parser {
         Ok(statements)
     }
 
-    // fn expression(&mut self) -> Result<Expr, NewError> {
-    //     self.equality()
-    // }
-
     fn expression(&mut self) -> Result<Expr, NewError> {
         self.assignment()
     }
 
     fn assignment(&mut self) -> Result<Expr, NewError> {
-        let expr = self.equality()?;
+        let expr = self.or()?;
 
         if let Some(token) = self.tokens.peek() && let TokenType::Equal = token.t {
             let _equals = self.tokens.next().unwrap();
@@ -163,6 +285,30 @@ impl Parser {
         } else {
             Ok(expr)
         }
+    }
+
+    fn or(&mut self) -> Result<Expr, NewError> {
+        let mut expr = self.and()?;
+
+        while let Some(operator) = self.tokens.next_if(|tok| if let TokenType::Or = tok.t {true} else {false}) {
+            let right = self.and()?;
+
+            expr = Expr::Logical { left: Box::new(expr), operator, right : Box::new(right) };
+        }
+
+        Ok(expr)
+    }
+
+    fn and(&mut self) -> Result<Expr, NewError> {
+        let mut expr = self.equality()?;
+
+        while let Some(operator) = self.tokens.next_if(|tok| if let TokenType::And = tok.t {true} else {false}) {
+            let right = self.equality()?;
+
+            expr = Expr::Logical { left: Box::new(expr), operator, right: Box::new(right) };
+        }
+
+        Ok(expr)
     }
 
     fn equality(&mut self) -> Result<Expr, NewError> {

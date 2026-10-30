@@ -50,6 +50,7 @@ pub enum TokenType {
     Truth, // True
     Var,
     While,
+    Break,
 
     //
     UnexpectedChar,
