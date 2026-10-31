@@ -1,8 +1,10 @@
-use crate::{grammar::*, statement};
+use crate::{grammar::*};
 use crate::interpreter_utils::{NewError, error};
 use crate::lex::{self, Token, TokenType};
 use crate::statement::Stmt;
 use std::iter::Peekable;
+
+const MAXIMUM_ARGS : usize = 255;
 
 pub struct Parser {
     pub tokens :  Peekable<std::vec::IntoIter<lex::Token>>,
@@ -12,7 +14,7 @@ impl Parser {
     pub fn parse(&mut self) -> Result<Vec<Stmt>,NewError> {
         let mut statements : Vec<Stmt> = Vec::new();
 
-        while let Some(token) = self.tokens.peek() {
+        while let Some(_) = self.tokens.peek() {
             let statement_or_err = self.declaration();
 
             match statement_or_err {
@@ -39,9 +41,55 @@ impl Parser {
                 Err(NewError::FillInStatement) => Err(NewError::Parse("Missing identifier", token)),
                 Err(e) => Err(e),
             }
+        } else if let Some(token) = self.tokens.peek() && let TokenType::Func = token.t {
+            self.function("function")
         } else {
             self.statement()
         }
+    }
+
+    fn function(&mut self, kind : &str) -> Result<Stmt, NewError> {
+        let Some(name) = self.tokens.next_if(|tok| if let TokenType::Identifier(_) = tok.t {true} else {false}) else {
+            return Err(NewError::FillInStatement)
+        };
+
+        let Some(left_paren) = self.tokens.next_if(|tok| if let TokenType::LeftParen = tok.t {true} else {false}) else {
+            return Err(NewError::Parse("Expected '(' after function name", name))
+        };
+
+        let mut params : Vec<Token> = Vec::new();
+
+        if let Some(token) = self.tokens.peek() {
+            match token.t {
+                TokenType::RightParen => (),
+                _ => loop {
+                    if params.len() >= MAXIMUM_ARGS {
+                        error(&left_paren, "Can't have more than 255 parameters");
+                    }
+
+                    // consume identifiers and add to param list
+                    let Some(identifier) = self.tokens.next_if(|tok| if let TokenType::Identifier(_) = tok.t {true} else {false}) else {
+                        return Err(NewError::Parse("Expect parameter name", name.clone()))
+                    };
+
+                    params.push(identifier);
+
+                    match self.tokens.next_if(|tok| if let TokenType::Comma = tok.t {true} else {false}) {
+                        Some(_) => (),
+                        _=> break
+                    }
+                }
+            }
+        };
+
+        let Some(_right_paren) = self.tokens.next_if(|tok| if let TokenType::RightParen = tok.t {true} else {false}) else {
+            return Err(NewError::Parse("Missing ')' after params", name.clone()));
+        };
+
+        let body = self.block()?;
+
+        Ok(Stmt::Function { name, params, body })
+
     }
 
     fn statement(&mut self) ->  Result<Stmt, NewError> {
@@ -399,7 +447,55 @@ impl Parser {
             }
         }
 
-        self.primary()
+        self.call()
+    }
+
+    fn call(&mut self) -> Result<Expr, NewError> {
+        let mut expr = self.primary()?;
+
+        loop {
+            if let Some(_tok) = self.tokens.next_if(|tok| if let TokenType::LeftParen = tok.t {true} else {false}) {
+                expr = self.finish_call(expr)?;
+            } else {
+                break;
+            }
+        }
+
+        Ok(expr)
+    }
+
+    fn finish_call(&mut self, callee : Expr) -> Result<Expr, NewError> {
+        let mut args : Vec<Expr> = Vec::new();
+
+        // check for right paren
+        if let Some(token) = self.tokens.peek() {
+               match token.t {
+                   TokenType::RightParen => (),
+                   _ => loop {
+                            if args.len() >= MAXIMUM_ARGS {
+                                if let Some(token) = self.tokens.next() {
+                                    error(&token, "Cannot have more than 255 arguments to a function");
+                                }
+                                break;
+                            }
+
+                            args.push(self.expression()?);
+                            if let Some(next) = self.tokens.peek() {
+                                match next.t {
+                                    TokenType::Comma => self.tokens.next().unwrap(),
+                                    _ => break
+                                };
+                            }
+                   }
+           }
+       }
+
+        // consume right paren
+        let Some(paren) = self.tokens.next_if(|tok| if let TokenType::RightParen = tok.t {true} else {false}) else {
+            return Err(NewError::FillInStatement)
+        };
+
+        Ok(Expr::Call { callee : Box::new(callee), paren, args })
     }
 
     fn primary(&mut self) -> Result<Expr, NewError> {
@@ -412,7 +508,7 @@ impl Parser {
                 TokenType::Nil => Expr::Literal(Value::Nil),
                 TokenType::Number(n) => Expr::Literal(Value::Number(n.to_owned())),
                 TokenType::String(s) => Expr::Literal(Value::String(s.to_owned())),
-                TokenType::Identifier(i) => Expr::Variable(token) ,
+                TokenType::Identifier(_) => Expr::Variable(token) ,
                 TokenType::LeftParen => {
                     let expr = self.expression().inspect_err(|e| {
                         if let NewError::Parse(msg, t) = e {

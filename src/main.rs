@@ -52,9 +52,9 @@ fn main() {
 
         let env = Environment {values : HashMap::new(), enclosing : None};
 
-        let interpreter = Interpreter {};
+        let mut interpreter = Interpreter {env: Rc::new(RefCell::new(env))};
 
-        interpreter.interpret(Rc::new(RefCell::new(env)), &statements);
+        interpreter.interpret(&statements);
 
         for e in err {
             println!("Found error {:?}", e);

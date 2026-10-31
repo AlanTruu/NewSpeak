@@ -3,18 +3,19 @@ use crate::lex::Token;
 use crate::interpreter_utils::{NewError, NewError::Runtime};
 use crate::lex::TokenType;
 use std::collections::HashMap;
+use std::fmt::Debug;
 use std::rc::Rc;
 use std::cell::RefCell;
 
 pub struct Interpreter {
-
+    pub env : Rc<RefCell<Environment>>
 }
 
 impl Interpreter {
-    pub fn execute(&self, env : Rc<RefCell<Environment>>, stmt : &Stmt) {
+    pub fn execute(&mut self, stmt : &Stmt) {
         match stmt {
             Stmt::Print(expr) => {
-                match env.borrow_mut().evaluate(expr) {
+                match self.env.borrow_mut().evaluate(expr, self) {
                     Ok(val) => {
                         match val {
                             Value::Bool(false) => println!("thoughtCrime"),
@@ -22,15 +23,16 @@ impl Interpreter {
                             Value::Number(n) => println!("{}", n),
                             Value::String(s) => println!("{}", s),
                             Value::Identifier(i) => println!("{}", i),
-                            Value::Nil => println!("nil")
+                            Value::Nil => println!("nil"),
+                            _=> todo!()
                         }
                     },
                     Err(e) => eprintln!("{:?}", e)
                 }
             },
             Stmt::Expression(expr) => {
-                match env.borrow_mut().evaluate(expr) {
-                    Ok(v) => {
+                match self.env.borrow_mut().evaluate(expr, self) {
+                    Ok(_) => {
 
                     },
                     Err(e) => eprintln!("{:?}", e),
@@ -38,42 +40,49 @@ impl Interpreter {
                 }
             },
             Stmt::Var { name, initializer : Some(initializer) } => {
-                let val = env.borrow_mut().evaluate(initializer);
+                let val = self.env.borrow_mut().evaluate(initializer, self);
 
                 match val {
-                    Ok(val) => env.borrow_mut().define(&name.lexeme, val),
+                    Ok(val) => self.env.borrow_mut().define(&name.lexeme, val),
                     Err(e) => eprintln!("{:?}", e)
                 }
             },
             Stmt::Var { name, initializer : None } => {
-                env.borrow_mut().define(&name.lexeme, Value::Nil);
+                self.env.borrow_mut().define(&name.lexeme, Value::Nil);
             },
             Stmt::Block(statements) => {
-                let outer = Some(Rc::clone(&env));
+                let outer = Some(Rc::clone(&self.env));
+
+                let prev = Rc::clone(&self.env);
 
                 let inner_env = Environment {
                     values : HashMap::new(),
                     enclosing : outer
                 };
 
-                self.interpret(Rc::new(RefCell::new(inner_env)), statements);
+                self.env = Rc::new(RefCell::new(inner_env));
+
+                self.interpret(statements);
+
+                // swap back to outer environment
+                self.env = prev;
             },
             Stmt::If { condition, on, otherwise } => {
 
-                let Ok(val) = env.borrow_mut().evaluate(condition) else {
+                let Ok(val) = self.env.borrow_mut().evaluate(condition, self) else {
                     panic!("Could not evaluate on condition")
                 };
 
                 if is_truthy(&val) {
-                    self.execute(env, on);
+                    self.execute(on);
                 } else if let Some(otherwise_expr) = otherwise {
-                    self.execute(env, otherwise_expr);
+                    self.execute(otherwise_expr);
                 }
             },
             Stmt::While { condition, body } => {
                 loop {
 
-                    if let Ok(val) = env.borrow_mut().evaluate(&condition) {
+                    if let Ok(val) = self.env.borrow_mut().evaluate(&condition, self) {
                         if !is_truthy(&val) {
                             break
                         }
@@ -81,17 +90,16 @@ impl Interpreter {
                         break
                     }
 
-                    self.execute(Rc::clone(&env), body);
-
+                    self.execute(body);
                 }
             }
             _ => todo!()
         }
     }
 
-    pub fn interpret(&self, env : Rc<RefCell<Environment>>, statements : &[Stmt]) {
+    pub fn interpret(&mut self, statements : &[Stmt]) {
         for statement in statements {
-            self.execute(Rc::clone(&env), statement);
+            self.execute(statement);
         }
     }
 }
@@ -103,7 +111,7 @@ pub struct Environment {
 }
 
 impl Environment {
-    pub fn evaluate(&mut self, e : &Expr) -> Result<Value, NewError> {
+    pub fn evaluate(&mut self, e : &Expr, interpreter : &Interpreter) -> Result<Value, NewError> {
         match e {
             Expr::Literal(Value::Nil) => Ok(Value::Nil),
             Expr::Literal(Value::Identifier(i)) => Ok(Value::Identifier(i.to_owned())),
@@ -111,9 +119,9 @@ impl Environment {
             Expr::Literal(Value::Number(n)) => Ok(Value::Number(n.to_owned())),
             Expr::Literal(Value::Bool(true)) => Ok(Value::Bool(true)),
             Expr::Literal(Value::Bool(false)) => Ok(Value::Bool(false)),
-            Expr::Grouping(expr) => self.evaluate(expr),
+            Expr::Grouping(expr) => self.evaluate(expr, interpreter),
             Expr::Unary { operator, right } => {
-                let right = self.evaluate(right)?;
+                let right = self.evaluate(right, interpreter)?;
 
                 if let TokenType::Minus = operator.t && let Value::Number(n) = right {
                     Ok(Value::Number(-n))
@@ -126,8 +134,8 @@ impl Environment {
                 }
             },
             Expr::Binary { left, operator, right } => {
-                let left = self.evaluate(left)?;
-                let right = self.evaluate(right)?;
+                let left = self.evaluate(left, interpreter)?;
+                let right = self.evaluate(right, interpreter)?;
 
                 if let Value::Number(n_1) = left && let Value::Number(n_2) = right {
                     match operator.t {
@@ -176,14 +184,14 @@ impl Environment {
             },
             Expr::Variable(v) => Ok(self.get(v)?.clone()),
             Expr::Assign { name, val } => {
-                let val = self.evaluate(&val)?;
+                let val = self.evaluate(&val, interpreter)?;
 
                 self.assign(name, val.clone())?;
 
                 Ok(val)
             },
             Expr::Logical { left, operator, right } => {
-                let left = self.evaluate(left)?;
+                let left = self.evaluate(left, interpreter)?;
 
                 // short circuiting
                 if let TokenType::Or = operator.t {
@@ -196,7 +204,27 @@ impl Environment {
                     }
                 }
 
-                self.evaluate(right)
+                self.evaluate(right, interpreter)
+            },
+            Expr::Call { callee, paren, args } => {
+                let mut callee = self.evaluate(callee, interpreter)?;
+
+                let mut arguments : Vec<Value> = Vec::new();
+
+                for arg in args {
+                    arguments.push(self.evaluate(arg, interpreter)?);
+                }
+
+                if let Value::String(_) = callee {
+                    return Err(Runtime("Can only call functions and classes", paren.clone()))
+                };
+
+
+                if arguments.len() != callee.arity() {
+                    return Err(Runtime("Incorrect number of arguments were passed to this function", paren.clone()))
+                }
+
+                callee.call(self, interpreter, &arguments)
             }
         }
     }
@@ -286,6 +314,7 @@ impl Environment {
 //     }
 }
 
+#[derive(Debug, Clone)]
 pub enum Stmt {
     Print(Expr),
     Expression(Expr),
@@ -302,5 +331,21 @@ pub enum Stmt {
     While {
         condition : Expr,
         body : Box<Stmt>
+    },
+    Function {
+        name : Token,
+        params : Vec<Token>,
+        body : Vec<Stmt>
+    }
+}
+
+pub trait NewSpeakCallable {
+    fn call(&mut self, env : &Environment, i :& Interpreter, arguments : &[Value]) -> Result<Value, NewError>;
+    fn arity(&mut self) -> usize;
+}
+
+impl Debug for dyn NewSpeakCallable {
+    fn fmt(&self, f : &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "yada")
     }
 }
