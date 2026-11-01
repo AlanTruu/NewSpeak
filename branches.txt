@@ -1,8 +1,26 @@
-var num = 0;
+func branch(num) {
+    on (num < 1) {
+        num = num + 1;
+        redact num;
+        return num;
+    } otherwise {
 
-on (num < 1) {
-    num = num + 1;
-    redact num;
-} otherwise {
-    redact 10;
+        while (num < 100) {
+            redact num;
+            num = num + 1;
+        }
+
+        return num;
+    }
 }
+
+var time_1 = time();
+branch(0);
+var time_2 = time();
+
+var time_3 = time();
+branch(1);
+var time_4 = time();
+
+redact time_2 - time_1;
+redact time_4 - time_3;

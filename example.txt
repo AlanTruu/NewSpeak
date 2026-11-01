@@ -4,19 +4,19 @@ var x = "sigma";
 var y = 1234;
 
 // loooop
-for (var i = 0; i != 10.1234; i = i + 1) {
+for (var i = 0; i != 10; i = i + 1) {
     on (x == "sigma" and y == 1234) {
         redact "ye";
     } otherwise {
         redact "ne";
 
     }
-
-    while (truth) {
-
-    }
 }
 
 func square(z) {
-    return z * z
+    return z * z;
 }
+
+var res = square(2);
+redact "The square root of 2 is ";
+redact res;

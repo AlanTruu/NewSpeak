@@ -44,15 +44,18 @@ pub enum Value {
     Identifier(String),
     Function {
         params : Vec<Token>,
-        body : Vec<Stmt>
+        body : Vec<Stmt>,
+        closure : Rc<RefCell<Environment>>
     },
+    ReturnVal(Box<Value>)
 }
 
 impl NewSpeakCallable for Value {
     fn call(&self, env : &Environment, i : &mut Interpreter, arguments : &[Value]) -> Result<Value, NewError> {
+
         match self {
-            Value::Function { params, body } => {
-                let scope = Environment {values : HashMap::new(), globals : Rc::clone(&env.globals), enclosing : None};
+            Value::Function { params, body, closure } => {
+                let scope = Environment {values : HashMap::new(), globals : Rc::clone(&env.globals), enclosing : Some(Rc::clone(closure))};
 
                 let env = Rc::new(RefCell::new(scope));
 
@@ -60,7 +63,12 @@ impl NewSpeakCallable for Value {
                     env.borrow_mut().define(&params[i].lexeme, arguments[i].clone());
                 }
 
-                i.interpret(body, env);
+                match i.interpret(body, env) {
+                    Value::ReturnVal(value) => {
+                        return Ok(*value)
+                    },
+                    _ => ()
+                }
 
                 Ok(Value::Nil)
             },
@@ -70,7 +78,7 @@ impl NewSpeakCallable for Value {
 
     fn arity(&self) -> usize {
         match self {
-            Value::Function { params, body : _ } => params.len(),
+            Value::Function { params, body : _ , closure : _} => params.len(),
             _=> 0
         }
     }

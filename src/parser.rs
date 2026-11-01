@@ -98,9 +98,31 @@ impl Parser {
             self.while_statement()
         } else if let Some(tok) = self.tokens.peek() && let TokenType::For = tok.t {
             self.for_statement()
+        } else if let Some(tok) = self.tokens.peek() && let TokenType::Return = tok.t {
+            self.return_statement()
         } else {
             self.expression_statement()
         }
+    }
+
+    fn return_statement(&mut self) -> Result<Stmt, NewError>{
+        let ret_token = self.tokens.next().unwrap();
+
+        if let Some(next) = self.tokens.peek() && let TokenType::Semicolon = next.t {
+            return Ok(Stmt::Return { keyword: ret_token, value: None })
+        } else if let Some(_) = self.tokens.peek() {
+            let value = Some(self.expression()?);
+
+            if let Some(_) = self.tokens.next_if(|tok| if let TokenType::Semicolon = tok.t {true} else {false}) {
+                return Ok(Stmt::Return { keyword: ret_token, value});
+            } else {
+                return Err(NewError::Parse("Expect ';' after return value", ret_token))
+            }
+        }
+
+        return Err(NewError::Parse("Expect ';' after return value", ret_token))
+
+
     }
 
     fn for_statement(&mut self) -> Result<Stmt, NewError> {

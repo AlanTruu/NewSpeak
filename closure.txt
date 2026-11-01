@@ -1,0 +1,15 @@
+func make_count() {
+    var i = 0;
+
+    func count() {
+        i = i + 1;
+        redact i;
+    }
+
+    return count;
+
+}
+
+var counter = make_count();
+counter();
+counter();

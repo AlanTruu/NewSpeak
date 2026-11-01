@@ -1,0 +1,18 @@
+func count(n) {
+    while (n < 100) {
+
+        on (n == 3) {
+            return n;
+        }
+
+        n = n + 1;
+        redact n;
+    }
+}
+
+var time_1 = time();
+var num = count(0);
+var time_2 = time();
+
+redact num;
+redact time_2 - time_1;

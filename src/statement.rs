@@ -10,30 +10,58 @@ use std::cell::RefCell;
 pub struct Interpreter {}
 
 impl Interpreter {
-    pub fn execute(&mut self, stmt : &Stmt, env: Rc<RefCell<Environment>>) {
+    pub fn execute(&mut self, stmt : &Stmt, env: Rc<RefCell<Environment>>) -> Value {
         match stmt {
             Stmt::Print(expr) => {
                 match env.borrow_mut().evaluate(expr, self) {
                     Ok(val) => {
                         match val {
-                            Value::Bool(false) => println!("thoughtCrime"),
-                            Value::Bool(true) => println!("truth"),
-                            Value::Number(n) => println!("{}", n),
-                            Value::String(s) => println!("{}", s),
-                            Value::Identifier(i) => println!("{}", i),
-                            Value::Nil => println!("nil"),
+                            Value::Bool(false) => {
+                                println!("thoughtCrime");
+                                Value::Nil
+                            },
+                            Value::Bool(true) =>{
+                                println!("truth");
+                                Value::Nil
+                            },
+                            Value::Number(n) =>{
+                                println!("{}", n);
+                                Value::Nil
+                            },
+                            Value::String(s) =>{
+                                println!("{}", s);
+                                Value::Nil
+                            },
+                            Value::Identifier(i) =>{
+                                println!("{}", i);
+                                Value::Nil
+                            },
+                            Value::Nil =>{
+                                println!("nil");
+                                Value::Nil
+                            },
                             _=> todo!()
                         }
                     },
-                    Err(e) => eprintln!("{:?}", e)
+                    Err(e) =>{
+                        eprintln!("{:?}", e);
+                        Value::Nil
+                    }
                 }
             },
             Stmt::Expression(expr) => {
                 match env.borrow_mut().evaluate(expr, self) {
-                    Ok(_) => {
+                    Ok(val) => {
+                        if let Value::ReturnVal(val) = val {
+                            return Value::ReturnVal(val)
+                        }
 
+                        Value::Nil
                     },
-                    Err(e) => eprintln!("{:?}", e),
+                    Err(e) =>{
+                        eprintln!("{:?}", e);
+                        Value::Nil
+                    },
                 }
             },
             Stmt::Var { name, initializer : Some(initializer) } => {
@@ -43,9 +71,11 @@ impl Interpreter {
                     Ok(val) => env.borrow_mut().define(&name.lexeme, val),
                     Err(e) => eprintln!("{:?}", e)
                 }
+                Value::Nil
             },
             Stmt::Var { name, initializer : None } => {
                 env.borrow_mut().define(&name.lexeme, Value::Nil);
+                Value::Nil
             },
             Stmt::Block(statements) => {
                 let outer = Some(Rc::clone(&env));
@@ -58,7 +88,12 @@ impl Interpreter {
 
                 let inner = Rc::new(RefCell::new(inner_env));
 
-                self.interpret(statements, inner);
+                if let Value::ReturnVal(val) = self.interpret(statements, inner) {
+                    return Value::ReturnVal(val)
+                }
+
+                Value::Nil
+
             },
             Stmt::If { condition, on, otherwise } => {
 
@@ -67,10 +102,16 @@ impl Interpreter {
                 };
 
                 if is_truthy(&val) {
-                    self.execute(on, env);
+                    if let Value::ReturnVal(val) = self.execute(on, env) {
+                        return Value::ReturnVal(val)
+                    }
                 } else if let Some(otherwise_expr) = otherwise {
-                    self.execute(otherwise_expr, env);
+                    if let Value::ReturnVal(val) = self.execute(otherwise_expr, env) {
+                        return Value::ReturnVal(val)
+                    }
                 }
+
+                Value::Nil
             },
             Stmt::While { condition, body } => {
                 loop {
@@ -83,23 +124,47 @@ impl Interpreter {
                         break
                     }
 
-                    self.execute(body, Rc::clone(&env));
+                     if let Value::ReturnVal(val) = self.execute(body, Rc::clone(&env)) {
+                         return Value::ReturnVal(val)
+                     }
                 }
+
+                Value::Nil
             },
             Stmt::Function { name, params, body } => {
-                let func = Value::Function{params: params.clone(), body : body.clone()};
+                let func = Value::Function{params: params.clone(), body : body.clone(), closure : Rc::clone(&env)};
 
                 env.borrow_mut().define(&name.lexeme, func);
+
+                Value::Nil
+            },
+            Stmt::Return { keyword, value } => {
+                if let Some(value) = value {
+                    let value = env.borrow_mut().evaluate(value, self);
+
+                    match value {
+                        Ok(value) =>{
+                            return Value::ReturnVal(Box::new(value));
+                        }
+                        Err(e) => {
+                            eprintln!("Error with return value: {:?}", e)
+                        }
+                    }
+                }
+
+                Value::Nil
             }
-            _ => todo!()
         }
     }
 
-    pub fn interpret(&mut self, statements : &[Stmt], env : Rc<RefCell<Environment>>) {
+    pub fn interpret(&mut self, statements : &[Stmt], env : Rc<RefCell<Environment>>) -> Value {
         for statement in statements {
-            self.execute(statement, Rc::clone(&env));
+            if let Value::ReturnVal(inner) =  self.execute(statement, Rc::clone(&env)) {
+                return Value::ReturnVal(inner)
+            }
         }
 
+        Value::Nil
     }
 }
 
@@ -223,7 +288,7 @@ impl Environment {
                         }
 
                         let Value::Function {
-                            params : _, body : _
+                            params : _, body : _, closure : _
                         } = callee else {
                             return Err(NewError::Runtime("Callee is not a function", paren.clone()))
                         };
@@ -286,56 +351,6 @@ impl Environment {
             }
         }
     }
-
-//     pub fn execute(&mut self, stmt : &Stmt) {
-//         match stmt {
-//             Stmt::Print(expr) => {
-//                 match self.evaluate(expr) {
-//                     Ok(val) => {
-//                         match val {
-//                             Value::Bool(false) => println!("thoughtCrime"),
-//                             Value::Bool(true) => println!("truth"),
-//                             Value::Number(n) => println!("{}", n),
-//                             Value::String(s) => println!("{}", s),
-//                             Value::Identifier(i) => println!("{}", i),
-//                             Value::Nil => println!("nil")
-//                         }
-//                     },
-//                     Err(e) => eprintln!("{:?}", e)
-//                 }
-//             },
-//             Stmt::Expression(expr) => {
-//                 match self.evaluate(expr) {
-//                     Ok(v) => {
-//
-//                     },
-//                     Err(e) => eprintln!("{:?}", e),
-//                     _ => todo!()
-//                 }
-//             },
-//             Stmt::Var { name, initializer : Some(initializer) } => {
-//                 let val = self.evaluate(initializer);
-//
-//                 match val {
-//                     Ok(val) => self.define(&name.lexeme, val),
-//                     Err(e) => eprintln!("{:?}", e)
-//                 }
-//             },
-//             Stmt::Var { name, initializer : None } => {
-//                 self.define(&name.lexeme, Value::Nil);
-//             },
-//             Stmt::Block(statements) => {
-//
-//             }
-//             _ => todo!()
-//         }
-//     }
-//
-//     pub fn interpret(&mut self, statements : &[Stmt]) {
-//         for statement in statements {
-//             self.execute(statement);
-//         }
-//     }
 }
 
 #[derive(Debug, Clone)]
@@ -360,6 +375,10 @@ pub enum Stmt {
         name : Token,
         params : Vec<Token>,
         body : Vec<Stmt>
+    },
+    Return {
+        keyword : Token,
+        value : Option<Expr>
     }
 }
 
