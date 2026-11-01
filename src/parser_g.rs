@@ -32,15 +32,7 @@ impl Parser {
 
     fn declaration(&mut self) -> Result<Stmt, NewError> {
         if let Some(token) = self.tokens.peek() && let TokenType::Var = token.t {
-
-            // consume var keyword
-            let token = self.tokens.next().unwrap();
-
-            match self.var_declaration() {
-                Ok(statement) => Ok(statement),
-                Err(NewError::FillInStatement) => Err(NewError::Parse("Missing identifier", token)),
-                Err(e) => Err(e),
-            }
+            self.var_declaration()
         } else if let Some(token) = self.tokens.peek() && let TokenType::Func = token.t {
             self.function("function")
         } else {
@@ -49,8 +41,11 @@ impl Parser {
     }
 
     fn function(&mut self, kind : &str) -> Result<Stmt, NewError> {
+        // Consume func keyword
+        let func_token = self.tokens.next().unwrap();
+
         let Some(name) = self.tokens.next_if(|tok| if let TokenType::Identifier(_) = tok.t {true} else {false}) else {
-            return Err(NewError::FillInStatement)
+            return Err(NewError::Parse("Missing identifier for function", func_token))
         };
 
         let Some(left_paren) = self.tokens.next_if(|tok| if let TokenType::LeftParen = tok.t {true} else {false}) else {
@@ -93,15 +88,8 @@ impl Parser {
     }
 
     fn statement(&mut self) ->  Result<Stmt, NewError> {
-        if let Some(tok) = self.tokens.next_if(|tok| if let TokenType::Redact = tok.t {true} else {false}) {
-            let res = self.print_statement();
-
-            match res {
-                Ok(statement) => Ok(statement),
-                Err(NewError::Parse(msg, token)) => Err(NewError::Parse(msg, token)),
-                Err(NewError::FillInSemicolon) => Err(NewError::Parse("Missing semicolon", tok.clone())),
-                _=> unreachable!()
-            }
+        if let Some(tok) = self.tokens.peek() && let TokenType::Redact = tok.t {
+            self.print_statement()
         } else if let Some(tok) = self.tokens.peek() && let TokenType::LeftBrace = tok.t {
             Ok(Stmt::Block(self.block()?))
         } else if let Some(tok) = self.tokens.peek() && let TokenType::On = tok.t {
@@ -134,8 +122,6 @@ impl Parser {
                 None
             },
             TokenType::Var => {
-                // consume var keyword
-                self.tokens.next().unwrap();
                 Some(self.var_declaration()?)
             },
             _=> Some(self.expression_statement()?)
@@ -236,6 +222,9 @@ impl Parser {
     }
 
     fn print_statement(&mut self) -> Result<Stmt, NewError> {
+        // consume redact keyword
+        let redact_token = self.tokens.next().unwrap();
+
         let expr = self.expression()?;
 
         if let Some(tok) = self.tokens.peek() && let TokenType::Semicolon = tok.t {
@@ -244,11 +233,14 @@ impl Parser {
         } else if let Some(tok) = self.tokens.peek() {
             Err(NewError::Parse("Missing semicolon", tok.clone()))
         } else {
-            Err(NewError::FillInSemicolon)
+            Err(NewError::Parse("Missing semicolon", redact_token))
         }
     }
 
     fn var_declaration(&mut self) -> Result<Stmt, NewError> {
+        // consume var keyword
+        let var_token = self.tokens.next().unwrap();
+
         let (id_or_none, equal_or_none) = (self.tokens.next_if(|tok| if let TokenType::Identifier(_) = tok.t {true} else {false}), self.tokens.next_if(|tok| if let TokenType::Equal = tok.t {true} else {false} ));
 
         match (id_or_none, equal_or_none) {
@@ -272,7 +264,7 @@ impl Parser {
                     Err(NewError::Parse("Expected semicolon", token_id))
                 }
             },
-            _ => Err(NewError::FillInStatement)
+            _ => Err(NewError::Parse("Missing identifier for var", var_token))
 
         }
     }
@@ -451,6 +443,7 @@ impl Parser {
     }
 
     fn call(&mut self) -> Result<Expr, NewError> {
+        // get callee/function name
         let mut expr = self.primary()?;
 
         loop {

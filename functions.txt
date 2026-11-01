@@ -1,0 +1,34 @@
+var name = "Alan";
+
+redact "hi, " + name + "!";
+
+func say_hi(first, last) {
+    redact "hi, " + first + " " + last + "!";
+}
+
+func loop(max) {
+
+    for (var index = 0; index < max; index = index + 1) {
+        redact index;
+
+        on (index == 99) {
+            redact "hurray!";
+        } otherwise {
+            redact "Nay";
+        }
+    }
+}
+
+func noth() {
+    redact "noth";
+}
+
+loop(100);
+noth();
+say_hi("Dear", "Reader");
+say_hi("Leon", "Osborne");
+
+var first = "What the";
+redact first;
+
+redact time();

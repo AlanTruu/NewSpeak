@@ -1,4 +1,4 @@
-(5 * 4) + (1 / 2)
+(5 * 4) + (1 / 2);
 
 var x = "sigma";
 var y = 1234;
@@ -6,9 +6,9 @@ var y = 1234;
 // loooop
 for (var i = 0; i != 10.1234; i = i + 1) {
     on (x == "sigma" and y == 1234) {
-        redact "ye"
+        redact "ye";
     } otherwise {
-        redact "ne"
+        redact "ne";
 
     }
 

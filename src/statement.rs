@@ -7,15 +7,13 @@ use std::fmt::Debug;
 use std::rc::Rc;
 use std::cell::RefCell;
 
-pub struct Interpreter {
-    pub env : Rc<RefCell<Environment>>
-}
+pub struct Interpreter {}
 
 impl Interpreter {
-    pub fn execute(&mut self, stmt : &Stmt) {
+    pub fn execute(&mut self, stmt : &Stmt, env: Rc<RefCell<Environment>>) {
         match stmt {
             Stmt::Print(expr) => {
-                match self.env.borrow_mut().evaluate(expr, self) {
+                match env.borrow_mut().evaluate(expr, self) {
                     Ok(val) => {
                         match val {
                             Value::Bool(false) => println!("thoughtCrime"),
@@ -31,7 +29,7 @@ impl Interpreter {
                 }
             },
             Stmt::Expression(expr) => {
-                match self.env.borrow_mut().evaluate(expr, self) {
+                match env.borrow_mut().evaluate(expr, self) {
                     Ok(_) => {
 
                     },
@@ -40,49 +38,45 @@ impl Interpreter {
                 }
             },
             Stmt::Var { name, initializer : Some(initializer) } => {
-                let val = self.env.borrow_mut().evaluate(initializer, self);
+                let val = env.borrow_mut().evaluate(initializer, self);
 
                 match val {
-                    Ok(val) => self.env.borrow_mut().define(&name.lexeme, val),
+                    Ok(val) => env.borrow_mut().define(&name.lexeme, val),
                     Err(e) => eprintln!("{:?}", e)
                 }
             },
             Stmt::Var { name, initializer : None } => {
-                self.env.borrow_mut().define(&name.lexeme, Value::Nil);
+                env.borrow_mut().define(&name.lexeme, Value::Nil);
             },
             Stmt::Block(statements) => {
-                let outer = Some(Rc::clone(&self.env));
-
-                let prev = Rc::clone(&self.env);
+                let outer = Some(Rc::clone(&env));
 
                 let inner_env = Environment {
                     values : HashMap::new(),
+                    globals : Rc::clone(&env.borrow().globals),
                     enclosing : outer
                 };
 
-                self.env = Rc::new(RefCell::new(inner_env));
+                let inner = Rc::new(RefCell::new(inner_env));
 
-                self.interpret(statements);
-
-                // swap back to outer environment
-                self.env = prev;
+                self.interpret(statements, inner);
             },
             Stmt::If { condition, on, otherwise } => {
 
-                let Ok(val) = self.env.borrow_mut().evaluate(condition, self) else {
+                let Ok(val) = env.borrow_mut().evaluate(condition, self) else {
                     panic!("Could not evaluate on condition")
                 };
 
                 if is_truthy(&val) {
-                    self.execute(on);
+                    self.execute(on, env);
                 } else if let Some(otherwise_expr) = otherwise {
-                    self.execute(otherwise_expr);
+                    self.execute(otherwise_expr, env);
                 }
             },
             Stmt::While { condition, body } => {
                 loop {
 
-                    if let Ok(val) = self.env.borrow_mut().evaluate(&condition, self) {
+                    if let Ok(val) = env.borrow_mut().evaluate(&condition, self) {
                         if !is_truthy(&val) {
                             break
                         }
@@ -90,28 +84,40 @@ impl Interpreter {
                         break
                     }
 
-                    self.execute(body);
+                    self.execute(body, Rc::clone(&env));
                 }
+            },
+            Stmt::Function { name, params, body } => {
+                let func = Value::Function{params: params.clone(), body : body.clone()};
+
+                env.borrow_mut().define(&name.lexeme, func);
             }
             _ => todo!()
         }
     }
 
-    pub fn interpret(&mut self, statements : &[Stmt]) {
+    pub fn interpret(&mut self, statements : &[Stmt], env : Rc<RefCell<Environment>>) {
         for statement in statements {
-            self.execute(statement);
+            self.execute(statement, Rc::clone(&env));
         }
+
     }
 }
 
 #[derive(Debug)]
+/// Encapsulates environment, contains values table for user defined values/functions, and globals table for developer defined functions.
 pub struct Environment {
     pub values : HashMap<String, Value>,
-    pub enclosing :  Option<Rc<RefCell<Environment>>>
+    pub enclosing :  Option<Rc<RefCell<Environment>>>,
+    pub globals : Rc<HashMap<String, Box<dyn NewSpeakCallable>>>
 }
 
 impl Environment {
-    pub fn evaluate(&mut self, e : &Expr, interpreter : &Interpreter) -> Result<Value, NewError> {
+    fn try_globals(&self, name : &str) -> Option<&Box<dyn NewSpeakCallable>> {
+        self.globals.get(name)
+    }
+
+    pub fn evaluate(&mut self, e : &Expr, interpreter : &mut Interpreter) -> Result<Value, NewError> {
         match e {
             Expr::Literal(Value::Nil) => Ok(Value::Nil),
             Expr::Literal(Value::Identifier(i)) => Ok(Value::Identifier(i.to_owned())),
@@ -207,29 +213,48 @@ impl Environment {
                 self.evaluate(right, interpreter)
             },
             Expr::Call { callee, paren, args } => {
-                let mut callee = self.evaluate(callee, interpreter)?;
+                let res = self.evaluate(callee, interpreter);
 
-                let mut arguments : Vec<Value> = Vec::new();
+                match res {
+                    Ok(callee) => {
+                        let mut arguments : Vec<Value> = Vec::new();
 
-                for arg in args {
-                    arguments.push(self.evaluate(arg, interpreter)?);
+                        for arg in args {
+                            arguments.push(self.evaluate(arg, interpreter)?);
+                        }
+
+                        let Value::Function {
+                            params : _, body : _
+                        } = callee else {
+                            return Err(NewError::Runtime("Callee is not a function", paren.clone()))
+                        };
+
+                        if arguments.len() != callee.arity() {
+                            return Err(Runtime("Incorrect number of arguments were passed to this function", paren.clone()))
+                        }
+
+                        callee.call(self, interpreter, &arguments)
+                    },
+                    Err(_) => {
+                        if let Expr::Variable(v) = &**callee {
+                            let Some(global) = self.try_globals(&v.lexeme) else {
+                                return Err(Runtime("Undefined function", paren.clone()))
+                            };
+
+                            global.call(self, interpreter, &vec![])
+                        } else {
+                            return Err(Runtime("Undefined function", paren.clone()))
+                        }
+                    }
                 }
 
-                if let Value::String(_) = callee {
-                    return Err(Runtime("Can only call functions and classes", paren.clone()))
-                };
 
-
-                if arguments.len() != callee.arity() {
-                    return Err(Runtime("Incorrect number of arguments were passed to this function", paren.clone()))
-                }
-
-                callee.call(self, interpreter, &arguments)
-            }
+            },
+            _=> panic!("Unknown error occured")
         }
     }
 
-    fn define(&mut self, name : &str, value : Value) {
+    pub fn define(&mut self, name : &str, value : Value) {
         self.values.insert(name.into(), value);
     }
 
@@ -340,8 +365,8 @@ pub enum Stmt {
 }
 
 pub trait NewSpeakCallable {
-    fn call(&mut self, env : &Environment, i :& Interpreter, arguments : &[Value]) -> Result<Value, NewError>;
-    fn arity(&mut self) -> usize;
+    fn call(&self, env : &Environment, i : &mut Interpreter, arguments : &[Value]) -> Result<Value, NewError>;
+    fn arity(&self) -> usize;
 }
 
 impl Debug for dyn NewSpeakCallable {

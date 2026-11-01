@@ -1,4 +1,7 @@
-use crate::statement::{Environment};
+use std::collections::HashMap;
+use std::rc::Rc;
+use std::cell::RefCell;
+use crate::statement::{Environment, Stmt};
 use crate::{interpreter_utils::NewError, lex::Token};
 use crate::statement::{NewSpeakCallable, Interpreter};
 
@@ -39,15 +42,37 @@ pub enum Value {
     Bool(bool),
     Nil,
     Identifier(String),
+    Function {
+        params : Vec<Token>,
+        body : Vec<Stmt>
+    },
 }
 
 impl NewSpeakCallable for Value {
-    fn call(&mut self, env : &Environment, i : &Interpreter, arguments : &[Value]) -> Result<Value, NewError> {
-        Ok(Value::Nil)
+    fn call(&self, env : &Environment, i : &mut Interpreter, arguments : &[Value]) -> Result<Value, NewError> {
+        match self {
+            Value::Function { params, body } => {
+                let scope = Environment {values : HashMap::new(), globals : Rc::clone(&env.globals), enclosing : None};
+
+                let env = Rc::new(RefCell::new(scope));
+
+                for i in 0..params.len() {
+                    env.borrow_mut().define(&params[i].lexeme, arguments[i].clone());
+                }
+
+                i.interpret(body, env);
+
+                Ok(Value::Nil)
+            },
+            _ => panic!()
+        }
     }
 
-    fn arity(&mut self) -> usize {
-        1
+    fn arity(&self) -> usize {
+        match self {
+            Value::Function { params, body } => params.len(),
+            _=> 0
+        }
     }
 }
 

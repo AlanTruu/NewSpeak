@@ -1,4 +1,4 @@
-var num = 5;
+var num = 0;
 
 on (num < 1) {
     num = num + 1;

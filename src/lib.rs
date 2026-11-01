@@ -55,10 +55,11 @@ pub mod interpreter_utils {
     use crate::grammar::Value;
     use crate::statement::Interpreter;
 
-    pub struct Clock;
+    #[derive(Debug, Clone)]
+    pub struct Time;
 
-    impl NewSpeakCallable for Clock {
-        fn call(&mut self, env : &crate::statement::Environment, i : &Interpreter, arguments : &[crate::grammar::Value]) -> Result<crate::grammar::Value, NewError> {
+    impl NewSpeakCallable for Time {
+        fn call(&self, env : &crate::statement::Environment, i : &mut Interpreter, arguments : &[crate::grammar::Value]) -> Result<crate::grammar::Value, NewError> {
             let sys_time = SystemTime::now().duration_since(UNIX_EPOCH);
             match sys_time {
                 Ok(n) => Ok(Value::Number(n.as_secs_f64())),
@@ -66,7 +67,7 @@ pub mod interpreter_utils {
             }
         }
 
-        fn arity(&mut self) -> usize {
+        fn arity(&self) -> usize {
             0
         }
     }
@@ -104,10 +105,10 @@ pub mod interpreter_utils {
         eprintln!("[line {}] Error {}: {}", line, location, message);
     }
 
-    pub fn get_globals() -> HashMap<String, Box<dyn Any>> {
+    pub fn get_globals() -> HashMap<String, Box<dyn NewSpeakCallable>> {
         let mut globals = HashMap::new();
 
-        globals.insert("clock".into(), Box::new(Clock) as Box<dyn Any>);
+        globals.insert("time".into(), Box::new(Time) as Box<dyn NewSpeakCallable>);
 
         globals
     }
