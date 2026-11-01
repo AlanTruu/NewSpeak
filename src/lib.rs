@@ -5,8 +5,6 @@ pub fn add(left: u64, right: u64) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lex::TokenType;
-    use std::collections::HashMap;
 
     #[test]
     fn it_works() {
@@ -14,41 +12,17 @@ mod tests {
         assert_eq!(result, 4);
     }
 
-    #[test]
-    fn get_tokens() {
-        let mut reserved : HashMap<&str, TokenType> = HashMap::new();
-        reserved.insert("and", TokenType::And);
-        reserved.insert("class", TokenType::Class);
-        reserved.insert("otherwise", TokenType::Otherwise);
-        reserved.insert("thoughtCrime", TokenType::ThoughtCrime);
-        reserved.insert("for", TokenType::For);
-        reserved.insert("func", TokenType::Func);
-        reserved.insert("on", TokenType::On);
-        reserved.insert("nil", TokenType::Nil);
-        reserved.insert("or", TokenType::Or);
-        reserved.insert("redact", TokenType::Redact);
-        reserved.insert("return", TokenType::Return);
-        reserved.insert("super", TokenType::Super);
-        reserved.insert("this", TokenType::This);
-        reserved.insert("truth", TokenType::Truth);
-        reserved.insert("var", TokenType::Var);
-        reserved.insert("while", TokenType::While);
-
-
-    }
 }
 
 pub mod lex;
 pub mod grammar;
 pub mod parser;
-pub mod parser_g;
 pub mod statement;
 
 pub mod interpreter_utils {
     use std::path::PathBuf;
     use std::fs;
     use std::collections::HashMap;
-    use std::any::Any;
     use std::time::{SystemTime, UNIX_EPOCH};
     use crate::statement::NewSpeakCallable;
     use crate::lex::*;
@@ -59,11 +33,11 @@ pub mod interpreter_utils {
     pub struct Time;
 
     impl NewSpeakCallable for Time {
-        fn call(&self, env : &crate::statement::Environment, i : &mut Interpreter, arguments : &[crate::grammar::Value]) -> Result<crate::grammar::Value, NewError> {
+        fn call(&self, _env : &crate::statement::Environment, _i : &mut Interpreter, _arguments : &[crate::grammar::Value]) -> Result<crate::grammar::Value, NewError> {
             let sys_time = SystemTime::now().duration_since(UNIX_EPOCH);
             match sys_time {
                 Ok(n) => Ok(Value::Number(n.as_secs_f64())),
-                Err(e) => Err(NewError::NativeFunctionFail)
+                Err(_) => Err(NewError::NativeFunctionFail)
             }
         }
 
@@ -111,5 +85,28 @@ pub mod interpreter_utils {
         globals.insert("time".into(), Box::new(Time) as Box<dyn NewSpeakCallable>);
 
         globals
+    }
+
+    pub fn define_reserved() -> HashMap<&'static str, TokenType> {
+        let mut reserved : HashMap<&str, TokenType> = HashMap::new();
+        reserved.insert("and", TokenType::And);
+        reserved.insert("class", TokenType::Class);
+        reserved.insert("otherwise", TokenType::Otherwise);
+        reserved.insert("thoughtCrime", TokenType::ThoughtCrime);
+        reserved.insert("for", TokenType::For);
+        reserved.insert("func", TokenType::Func);
+        reserved.insert("on", TokenType::On);
+        reserved.insert("nil", TokenType::Nil);
+        reserved.insert("or", TokenType::Or);
+        reserved.insert("redact", TokenType::Redact);
+        reserved.insert("return", TokenType::Return);
+        reserved.insert("super", TokenType::Super);
+        reserved.insert("this", TokenType::This);
+        reserved.insert("truth", TokenType::Truth);
+        reserved.insert("var", TokenType::Var);
+        reserved.insert("while", TokenType::While);
+        reserved.insert("break", TokenType::Break);
+
+        reserved
     }
 }

@@ -6,7 +6,7 @@
 
 
 use std::{cell::RefCell, env, rc::Rc};
-use NewSpeak::{grammar::print, interpreter_utils::{self, get_globals}, lex::TokenType, parser_g::Parser, statement::{Environment, Interpreter}};
+use new_speak::{interpreter_utils::{self, define_reserved, get_globals}, lex::TokenType, parser::Parser, statement::{Environment, Interpreter}};
 use std::collections::HashMap;
 
 
@@ -21,24 +21,7 @@ fn main() {
 
         let path = &args[1];
 
-        let mut reserved : HashMap<&str, TokenType> = HashMap::new();
-        reserved.insert("and", TokenType::And);
-        reserved.insert("class", TokenType::Class);
-        reserved.insert("otherwise", TokenType::Otherwise);
-        reserved.insert("thoughtCrime", TokenType::ThoughtCrime);
-        reserved.insert("for", TokenType::For);
-        reserved.insert("func", TokenType::Func);
-        reserved.insert("on", TokenType::On);
-        reserved.insert("nil", TokenType::Nil);
-        reserved.insert("or", TokenType::Or);
-        reserved.insert("redact", TokenType::Redact);
-        reserved.insert("return", TokenType::Return);
-        reserved.insert("super", TokenType::Super);
-        reserved.insert("this", TokenType::This);
-        reserved.insert("truth", TokenType::Truth);
-        reserved.insert("var", TokenType::Var);
-        reserved.insert("while", TokenType::While);
-        reserved.insert("break", TokenType::Break);
+        let mut reserved : HashMap<&str, TokenType> = define_reserved();
 
         let (tokens, err) = interpreter_utils::run_file(path.into(), &mut reserved);
 

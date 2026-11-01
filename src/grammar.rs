@@ -70,7 +70,7 @@ impl NewSpeakCallable for Value {
 
     fn arity(&self) -> usize {
         match self {
-            Value::Function { params, body } => params.len(),
+            Value::Function { params, body : _ } => params.len(),
             _=> 0
         }
     }

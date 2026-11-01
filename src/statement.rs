@@ -34,7 +34,6 @@ impl Interpreter {
 
                     },
                     Err(e) => eprintln!("{:?}", e),
-                    _ => todo!()
                 }
             },
             Stmt::Var { name, initializer : Some(initializer) } => {

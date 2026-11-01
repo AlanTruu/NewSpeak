@@ -158,7 +158,7 @@ pub fn scan(source : &str, reserved: &mut HashMap<&str, TokenType>) -> (Vec<Toke
                     let mut str = String::new();
                     let mut closing = false;
 
-                    while let Some(next) = chars.peek() {
+                    while let Some(_) = chars.peek() {
                         let ch = chars.next().unwrap();
                         if ch == '"' {
                             closing = true;
