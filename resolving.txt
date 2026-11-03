@@ -1,0 +1,12 @@
+var a = "global";
+
+{
+    func show_a() {
+        redact a;
+    }
+
+    show_a();
+    var a = "block";
+    show_a();
+
+}

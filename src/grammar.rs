@@ -52,7 +52,6 @@ pub enum Value {
 
 impl NewSpeakCallable for Value {
     fn call(&self, env : &Environment, i : &mut Interpreter, arguments : &[Value]) -> Result<Value, NewError> {
-
         match self {
             Value::Function { params, body, closure } => {
                 let scope = Environment {values : HashMap::new(), globals : Rc::clone(&env.globals), enclosing : Some(Rc::clone(closure))};

@@ -10,10 +10,16 @@ use std::cell::RefCell;
 pub struct Interpreter {}
 
 impl Interpreter {
+    pub fn resolve(&mut self, expr : &Expr, distance : usize) {
+        
+    }
+    
     pub fn execute(&mut self, stmt : &Stmt, env: Rc<RefCell<Environment>>) -> Value {
         match stmt {
             Stmt::Print(expr) => {
-                match env.borrow_mut().evaluate(expr, self) {
+                let val_or_err = env.borrow_mut().evaluate(expr, self);
+
+                match val_or_err {
                     Ok(val) => {
                         match val {
                             Value::Bool(false) => {
@@ -50,7 +56,9 @@ impl Interpreter {
                 }
             },
             Stmt::Expression(expr) => {
-                match env.borrow_mut().evaluate(expr, self) {
+                let val_or_err = env.borrow_mut().evaluate(expr, self);
+
+                match val_or_err {
                     Ok(val) => {
                         if let Value::ReturnVal(val) = val {
                             return Value::ReturnVal(val)
@@ -340,7 +348,7 @@ impl Environment {
             Some(val) => Ok(val.clone()),
             None => {
                 if let Some(enclosing) = &self.enclosing {
-                   let Ok(val) = enclosing.borrow_mut().get(name) else {
+                   let Ok(val) = enclosing.borrow().get(name) else {
                        return Err(NewError::Runtime("Undefined variable", name.clone()))
                    };
 
