@@ -1,7 +1,5 @@
 use std::collections::HashMap;
-use std::rc::Rc;
-use std::cell::RefCell;
-use crate::statement::{Environment, Scope, Stmt};
+use crate::statement::{Scope, Stmt};
 use crate::{interpreter_utils::NewError, lex::Token};
 use crate::statement::{NewSpeakCallable, Interpreter};
 
@@ -51,7 +49,7 @@ pub enum Value {
 }
 
 impl NewSpeakCallable for Value {
-    fn call(&self, env : &mut Scope, i : &mut Interpreter, arguments : &[Value], closure : usize, globals : &HashMap<String, Box<dyn NewSpeakCallable>>) -> Result<Value, NewError> {
+    fn call(&self, env : &mut Scope, i : &mut Interpreter, arguments : &[Value], globals : &HashMap<String, Box<dyn NewSpeakCallable>>) -> Result<Value, NewError> {
         match self {
             Value::Function { params, body, closure_index } => {
                 let mut new_scope = Scope::from(&env.environments[..=*closure_index]);

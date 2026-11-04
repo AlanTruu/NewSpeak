@@ -5,7 +5,7 @@
 */
 
 
-use std::{cell::RefCell, env, rc::Rc};
+use std::{env};
 use new_speak::{interpreter_utils::{self, define_reserved, get_globals}, lex::TokenType, parser::Parser, statement::{Environment, Interpreter, Scope}};
 use std::collections::HashMap;
 

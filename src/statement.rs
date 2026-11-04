@@ -1,12 +1,9 @@
 use crate::grammar::{Expr, Value, is_equal, is_truthy};
-use crate::interpreter_utils::get_globals;
 use crate::lex::Token;
 use crate::interpreter_utils::{NewError, NewError::Runtime};
 use crate::lex::TokenType;
 use std::collections::HashMap;
-use std::f64::consts::GOLDEN_RATIO;
 use std::fmt::Debug;
-use std::ops::Sub;
 
 pub struct Interpreter {
     locals : HashMap<String, usize>,
@@ -208,7 +205,7 @@ impl Interpreter {
 
                 Value::Nil
             },
-            Stmt::Return { keyword, value } => {
+            Stmt::Return { keyword : _, value } => {
                 if let Some(value) = value {
                     let value = scope.evaluate(value, self, globals);
 
@@ -388,7 +385,7 @@ impl Scope {
                             return Err(Runtime("Incorrect number of arguments were passed to this function", paren.clone()))
                         }
 
-                        callee.call(self, interpreter, &arguments, self.get_current_scope().index, globals)
+                        callee.call(self, interpreter, &arguments, globals)
                     },
                     Err(_) => {
                         if let Expr::Variable(v) = &**callee {
@@ -396,14 +393,12 @@ impl Scope {
                                 return Err(Runtime("Incorrect number of arguments were passed to this function", paren.clone()))
                             };
 
-                            return callable.call(self, interpreter, &vec![], self.get_current_scope().index, globals)
+                            return callable.call(self, interpreter, &vec![], globals)
                         }
 
                         Ok(Value::Nil)
                     }
                 }
-
-
             },
             _=> panic!("Unknown error occured")
         }
@@ -444,7 +439,7 @@ pub enum Stmt {
 }
 
 pub trait NewSpeakCallable {
-    fn call(&self, env : &mut Scope, i : &mut Interpreter, arguments : &[Value], closure : usize, globals : &HashMap<String, Box<dyn NewSpeakCallable>>) -> Result<Value, NewError>;
+    fn call(&self, env : &mut Scope, i : &mut Interpreter, arguments : &[Value], globals : &HashMap<String, Box<dyn NewSpeakCallable>>) -> Result<Value, NewError>;
     fn arity(&self) -> usize;
 }
 
