@@ -53,6 +53,9 @@ impl Resolver {
             Stmt::While { condition, body } => {
                 self.resolve_expr(condition)?;
                 self.resolve_statement(body)?;
+            },
+            Stmt::Print(val) => {
+                self.resolve_expr(val)?;
             }
             _ => ()
         }
@@ -113,6 +116,9 @@ impl Resolver {
             },
             Expr::Literal(_lit) => {
 
+            },
+            Expr::Unary { operator : _, right } => {
+                self.resolve_expr(right)?;
             }
             _ => todo!()
         }
@@ -125,7 +131,7 @@ impl Resolver {
 
         for (i, scope) in self.scopes.iter().rev().enumerate() {
             if scope.contains_key(name) {
-                self.interpreter.resolve(expr, length - 1 - i);
+                self.interpreter.resolve(name, length - 1 - i);
                 return
             }
         }

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::cell::RefCell;
-use crate::statement::{Environment, Stmt};
+use crate::statement::{Environment, Scope, Stmt};
 use crate::{interpreter_utils::NewError, lex::Token};
 use crate::statement::{NewSpeakCallable, Interpreter};
 
@@ -45,24 +45,22 @@ pub enum Value {
     Function {
         params : Vec<Token>,
         body : Vec<Stmt>,
-        closure : Rc<RefCell<Environment>>
+        closure_index : usize
     },
     ReturnVal(Box<Value>)
 }
 
 impl NewSpeakCallable for Value {
-    fn call(&self, env : &Environment, i : &mut Interpreter, arguments : &[Value]) -> Result<Value, NewError> {
+    fn call(&self, env : &mut Scope, i : &mut Interpreter, arguments : &[Value], closure : usize, globals : &HashMap<String, Box<dyn NewSpeakCallable>>) -> Result<Value, NewError> {
         match self {
-            Value::Function { params, body, closure } => {
-                let scope = Environment {values : HashMap::new(), globals : Rc::clone(&env.globals), enclosing : Some(Rc::clone(closure))};
-
-                let env = Rc::new(RefCell::new(scope));
+            Value::Function { params, body, closure_index } => {
+                let mut new_scope = Scope::from(&env.environments[..=*closure_index]);
 
                 for i in 0..params.len() {
-                    env.borrow_mut().define(&params[i].lexeme, arguments[i].clone());
+                    new_scope.define(&params[i].lexeme, arguments[i].clone());
                 }
 
-                match i.interpret(body, env) {
+                match i.interpret(body, &mut new_scope, globals) {
                     Value::ReturnVal(value) => {
                         return Ok(*value)
                     },
@@ -77,7 +75,7 @@ impl NewSpeakCallable for Value {
 
     fn arity(&self) -> usize {
         match self {
-            Value::Function { params, body : _ , closure : _} => params.len(),
+            Value::Function { params, body : _, closure_index: _ } => params.len(),
             _=> 0
         }
     }

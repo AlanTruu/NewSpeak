@@ -35,4 +35,7 @@ redact first;
 
 var time_2 = time();
 
+redact time_2;
+redact time_1;
+
 redact time_2 - time_1;

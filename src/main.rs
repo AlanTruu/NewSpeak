@@ -6,7 +6,7 @@
 
 
 use std::{cell::RefCell, env, rc::Rc};
-use new_speak::{interpreter_utils::{self, define_reserved, get_globals}, lex::TokenType, parser::Parser, statement::{Environment, Interpreter}};
+use new_speak::{interpreter_utils::{self, define_reserved, get_globals}, lex::TokenType, parser::Parser, statement::{Environment, Interpreter, Scope}};
 use std::collections::HashMap;
 
 
@@ -33,13 +33,15 @@ fn main() {
 
         let statements = p.parse().unwrap();
 
-        let env = Environment {values : HashMap::new(), globals : Rc::new(get_globals()), enclosing : None};
+        let env = Environment {values : HashMap::new(), index : 0};
 
-        let env = Rc::new(RefCell::new(env));
+        let mut interpreter = Interpreter::new();
 
-        let mut interpreter = Interpreter {};
+        let mut scope = Scope {
+            environments : vec![env]
+        };
 
-        interpreter.interpret(&statements, env);
+        interpreter.interpret(&statements, &mut scope, &get_globals());
 
         for e in err {
             println!("Found error {:?}", e);

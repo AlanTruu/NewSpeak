@@ -1,23 +1,86 @@
 use crate::grammar::{Expr, Value, is_equal, is_truthy};
+use crate::interpreter_utils::get_globals;
 use crate::lex::Token;
 use crate::interpreter_utils::{NewError, NewError::Runtime};
 use crate::lex::TokenType;
 use std::collections::HashMap;
+use std::f64::consts::GOLDEN_RATIO;
 use std::fmt::Debug;
-use std::rc::Rc;
-use std::cell::RefCell;
+use std::ops::Sub;
 
-pub struct Interpreter {}
+pub struct Interpreter {
+    locals : HashMap<String, usize>,
+}
+
+#[derive(Debug)]
+pub struct Scope {
+    pub environments : Vec<Environment>
+}
+
+impl Scope {
+    pub fn exit_scope(&mut self) {
+        self.environments.pop();
+    }
+
+    pub fn get_current_scope(&self) -> &Environment {
+        self.environments.last().unwrap()
+    }
+
+    pub fn get_current_mut_scope(&mut self) ->  &mut Environment {
+        self.environments.last_mut().unwrap()
+    }
+}
 
 impl Interpreter {
-    pub fn resolve(&mut self, expr : &Expr, distance : usize) {
-        
+    pub fn new() -> Self {
+        Self {
+            locals : HashMap::new()
+        }
     }
-    
-    pub fn execute(&mut self, stmt : &Stmt, env: Rc<RefCell<Environment>>) -> Value {
+
+    fn get(&self, name : &Token, index : usize, scope : &Scope) -> Result<Value, NewError> {
+        let val_or_none = scope.environments[index].values.get(&name.lexeme);
+
+        match val_or_none {
+            Some(val) => Ok(val.clone()),
+            None => {
+                    if index > 0 {
+                        return self.get(name, index - 1, scope)
+                    } else {
+                        return Err(NewError::Runtime("Undefined variable", name.clone()))
+                    }
+
+            }
+        }
+    }
+
+    fn assign(&mut self, name : &Token, value : Value, index : usize, scope : &mut Scope) -> Result<(), NewError> {
+        if scope.environments[index].values.contains_key(&name.lexeme as &str) {
+            scope.environments[index].values.insert(name.lexeme.clone(), value);
+            Ok(())
+        } else if index > 0 {
+            self.assign(name, value, index - 1, scope)
+        } else {
+            Err(NewError::Runtime("Undefined variable", name.clone()))
+        }
+    }
+
+    // pub fn find(&self, name : &Token) -> Option<&Value> {
+    //     self.get_current_scope().values.get(&name.lexeme)
+    // }
+
+    pub fn resolve(&mut self, name : &str, depth : usize) {
+        self.locals.insert(name.to_string(), depth);
+    }
+
+    pub fn look_up_var(&self, name : &str) ->  Option<&usize>{
+        self.locals.get(name)
+    }
+
+    pub fn execute(&mut self, stmt : &Stmt, scope : &mut Scope, globals : &HashMap<String, Box<dyn NewSpeakCallable>>) -> Value {
         match stmt {
             Stmt::Print(expr) => {
-                let val_or_err = env.borrow_mut().evaluate(expr, self);
+                let val_or_err = scope.evaluate(expr, self, globals);
 
                 match val_or_err {
                     Ok(val) => {
@@ -56,7 +119,7 @@ impl Interpreter {
                 }
             },
             Stmt::Expression(expr) => {
-                let val_or_err = env.borrow_mut().evaluate(expr, self);
+                let val_or_err = scope.evaluate(expr, self, globals);
 
                 match val_or_err {
                     Ok(val) => {
@@ -73,48 +136,47 @@ impl Interpreter {
                 }
             },
             Stmt::Var { name, initializer : Some(initializer) } => {
-                let val = env.borrow_mut().evaluate(initializer, self);
+                let val = scope.evaluate(initializer, self, globals);
 
                 match val {
-                    Ok(val) => env.borrow_mut().define(&name.lexeme, val),
+                    Ok(val) => scope.define(&name.lexeme, val),
                     Err(e) => eprintln!("{:?}", e)
                 }
                 Value::Nil
             },
             Stmt::Var { name, initializer : None } => {
-                env.borrow_mut().define(&name.lexeme, Value::Nil);
+                scope.define(&name.lexeme, Value::Nil);
                 Value::Nil
             },
             Stmt::Block(statements) => {
-                let outer = Some(Rc::clone(&env));
 
                 let inner_env = Environment {
                     values : HashMap::new(),
-                    globals : Rc::clone(&env.borrow().globals),
-                    enclosing : outer
+                    index : scope.get_current_scope().index + 1
                 };
 
-                let inner = Rc::new(RefCell::new(inner_env));
+                scope.environments.push(inner_env);
 
-                if let Value::ReturnVal(val) = self.interpret(statements, inner) {
+                if let Value::ReturnVal(val) = self.interpret(statements, scope, globals) {
+                    scope.environments.pop();
                     return Value::ReturnVal(val)
+                } else {
+                    scope.environments.pop();
+                    Value::Nil
                 }
-
-                Value::Nil
-
             },
             Stmt::If { condition, on, otherwise } => {
 
-                let Ok(val) = env.borrow_mut().evaluate(condition, self) else {
+                let Ok(val) = scope.evaluate(condition, self, globals) else {
                     panic!("Could not evaluate on condition")
                 };
 
                 if is_truthy(&val) {
-                    if let Value::ReturnVal(val) = self.execute(on, env) {
+                    if let Value::ReturnVal(val) = self.execute(on, scope, globals) {
                         return Value::ReturnVal(val)
                     }
                 } else if let Some(otherwise_expr) = otherwise {
-                    if let Value::ReturnVal(val) = self.execute(otherwise_expr, env) {
+                    if let Value::ReturnVal(val) = self.execute(otherwise_expr, scope, globals) {
                         return Value::ReturnVal(val)
                     }
                 }
@@ -124,7 +186,7 @@ impl Interpreter {
             Stmt::While { condition, body } => {
                 loop {
 
-                    if let Ok(val) = env.borrow_mut().evaluate(&condition, self) {
+                    if let Ok(val) = scope.evaluate(&condition, self, globals) {
                         if !is_truthy(&val) {
                             break
                         }
@@ -132,7 +194,7 @@ impl Interpreter {
                         break
                     }
 
-                     if let Value::ReturnVal(val) = self.execute(body, Rc::clone(&env)) {
+                     if let Value::ReturnVal(val) = self.execute(body, scope, globals) {
                          return Value::ReturnVal(val)
                      }
                 }
@@ -140,15 +202,15 @@ impl Interpreter {
                 Value::Nil
             },
             Stmt::Function { name, params, body } => {
-                let func = Value::Function{params: params.clone(), body : body.clone(), closure : Rc::clone(&env)};
+                let func = Value::Function{params: params.clone(), body : body.clone(), closure_index : scope.get_current_scope().index};
 
-                env.borrow_mut().define(&name.lexeme, func);
+                scope.define(&name.lexeme, func);
 
                 Value::Nil
             },
             Stmt::Return { keyword, value } => {
                 if let Some(value) = value {
-                    let value = env.borrow_mut().evaluate(value, self);
+                    let value = scope.evaluate(value, self, globals);
 
                     match value {
                         Ok(value) =>{
@@ -165,9 +227,9 @@ impl Interpreter {
         }
     }
 
-    pub fn interpret(&mut self, statements : &[Stmt], env : Rc<RefCell<Environment>>) -> Value {
+    pub fn interpret(&mut self, statements : &[Stmt], scope : &mut Scope, globals : &HashMap<String, Box<dyn NewSpeakCallable>>) -> Value {
         for statement in statements {
-            if let Value::ReturnVal(inner) =  self.execute(statement, Rc::clone(&env)) {
+            if let Value::ReturnVal(inner) =  self.execute(statement, scope, globals) {
                 return Value::ReturnVal(inner)
             }
         }
@@ -176,20 +238,28 @@ impl Interpreter {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 /// Encapsulates environment, contains values table for user defined values/functions, and globals table for developer defined functions.
 pub struct Environment {
     pub values : HashMap<String, Value>,
-    pub enclosing :  Option<Rc<RefCell<Environment>>>,
-    pub globals : Rc<HashMap<String, Box<dyn NewSpeakCallable>>>
+    pub index : usize
+
 }
 
-impl Environment {
-    fn try_globals(&self, name : &str) -> Option<&Box<dyn NewSpeakCallable>> {
-        self.globals.get(name)
+impl Scope {
+    pub fn new() -> Self {
+        Self {
+            environments : Vec::new()
+        }
     }
 
-    pub fn evaluate(&mut self, e : &Expr, interpreter : &mut Interpreter) -> Result<Value, NewError> {
+    pub fn from(source : &[Environment]) -> Self {
+        Self {
+            environments : source.into()
+        }
+    }
+
+    pub fn evaluate(&mut self, e : &Expr, interpreter : &mut Interpreter, globals : &HashMap<String, Box<dyn NewSpeakCallable>>) -> Result<Value, NewError> {
         match e {
             Expr::Literal(Value::Nil) => Ok(Value::Nil),
             Expr::Literal(Value::Identifier(i)) => Ok(Value::Identifier(i.to_owned())),
@@ -197,9 +267,9 @@ impl Environment {
             Expr::Literal(Value::Number(n)) => Ok(Value::Number(n.to_owned())),
             Expr::Literal(Value::Bool(true)) => Ok(Value::Bool(true)),
             Expr::Literal(Value::Bool(false)) => Ok(Value::Bool(false)),
-            Expr::Grouping(expr) => self.evaluate(expr, interpreter),
+            Expr::Grouping(expr) => self.evaluate(expr, interpreter, globals),
             Expr::Unary { operator, right } => {
-                let right = self.evaluate(right, interpreter)?;
+                let right = self.evaluate(right, interpreter, globals)?;
 
                 if let TokenType::Minus = operator.t && let Value::Number(n) = right {
                     Ok(Value::Number(-n))
@@ -212,8 +282,8 @@ impl Environment {
                 }
             },
             Expr::Binary { left, operator, right } => {
-                let left = self.evaluate(left, interpreter)?;
-                let right = self.evaluate(right, interpreter)?;
+                let left = self.evaluate(left, interpreter, globals)?;
+                let right = self.evaluate(right, interpreter, globals)?;
 
                 if let Value::Number(n_1) = left && let Value::Number(n_2) = right {
                     match operator.t {
@@ -260,16 +330,29 @@ impl Environment {
                     }
                 }
             },
-            Expr::Variable(v) => Ok(self.get(v)?.clone()),
+            Expr::Variable(v) => {
+//                 let dist_or_none = interpreter.look_up_var(&v.lexeme);
+//
+//                 if let Some(dist) = dist_or_none {
+//                     // find var
+//                 } else {
+//                     // check in globals
+//                     todo!()
+//                 }
+
+                interpreter.get(v, self.get_current_scope().index, self)
+
+                // Ok(interpreter.get(v, self.get_current_scope().index, &self)?)
+            },
             Expr::Assign { name, val } => {
-                let val = self.evaluate(&val, interpreter)?;
+                let val = self.evaluate(&val, interpreter, globals)?;
 
-                self.assign(name, val.clone())?;
+                interpreter.assign(name, val, self.get_current_scope().index, self)?;
 
-                Ok(val)
+                Ok(Value::Nil)
             },
             Expr::Logical { left, operator, right } => {
-                let left = self.evaluate(left, interpreter)?;
+                let left = self.evaluate(left, interpreter, globals)?;
 
                 // short circuiting
                 if let TokenType::Or = operator.t {
@@ -282,21 +365,21 @@ impl Environment {
                     }
                 }
 
-                self.evaluate(right, interpreter)
+                self.evaluate(right, interpreter, globals)
             },
             Expr::Call { callee, paren, args } => {
-                let res = self.evaluate(callee, interpreter);
+                let res = self.evaluate(callee, interpreter, globals);
 
                 match res {
                     Ok(callee) => {
                         let mut arguments : Vec<Value> = Vec::new();
 
                         for arg in args {
-                            arguments.push(self.evaluate(arg, interpreter)?);
+                            arguments.push(self.evaluate(arg, interpreter, globals)?);
                         }
 
                         let Value::Function {
-                            params : _, body : _, closure : _
+                            params : _, body : _, closure_index : _
                         } = callee else {
                             return Err(NewError::Runtime("Callee is not a function", paren.clone()))
                         };
@@ -305,18 +388,18 @@ impl Environment {
                             return Err(Runtime("Incorrect number of arguments were passed to this function", paren.clone()))
                         }
 
-                        callee.call(self, interpreter, &arguments)
+                        callee.call(self, interpreter, &arguments, self.get_current_scope().index, globals)
                     },
                     Err(_) => {
                         if let Expr::Variable(v) = &**callee {
-                            let Some(global) = self.try_globals(&v.lexeme) else {
-                                return Err(Runtime("Undefined function", paren.clone()))
+                            let Some(callable) = globals.get(&v.lexeme) else {
+                                return Err(Runtime("Incorrect number of arguments were passed to this function", paren.clone()))
                             };
 
-                            global.call(self, interpreter, &vec![])
-                        } else {
-                            return Err(Runtime("Undefined function", paren.clone()))
+                            return callable.call(self, interpreter, &vec![], self.get_current_scope().index, globals)
                         }
+
+                        Ok(Value::Nil)
                     }
                 }
 
@@ -327,37 +410,7 @@ impl Environment {
     }
 
     pub fn define(&mut self, name : &str, value : Value) {
-        self.values.insert(name.into(), value);
-    }
-
-    fn assign(&mut self, name : &Token, value : Value) -> Result<(), NewError> {
-        if self.values.contains_key(&name.lexeme as &str) {
-            self.values.insert(name.lexeme.clone(), value);
-            Ok(())
-        } else if let Some(enclosing) = &mut self.enclosing {
-            enclosing.borrow_mut().assign(name, value)
-        } else {
-            Err(NewError::Runtime("Undefined variable", name.clone()))
-        }
-    }
-
-    fn get(&self, name : &Token) -> Result<Value, NewError> {
-        let val_or_none = self.values.get(&name.lexeme as &str);
-
-        match val_or_none {
-            Some(val) => Ok(val.clone()),
-            None => {
-                if let Some(enclosing) = &self.enclosing {
-                   let Ok(val) = enclosing.borrow().get(name) else {
-                       return Err(NewError::Runtime("Undefined variable", name.clone()))
-                   };
-
-                   Ok(val)
-                } else {
-                    Err(NewError::Runtime("Undefined variable", name.clone()))
-                }
-            }
-        }
+        self.get_current_mut_scope().values.insert(name.into(), value);
     }
 }
 
@@ -391,7 +444,7 @@ pub enum Stmt {
 }
 
 pub trait NewSpeakCallable {
-    fn call(&self, env : &Environment, i : &mut Interpreter, arguments : &[Value]) -> Result<Value, NewError>;
+    fn call(&self, env : &mut Scope, i : &mut Interpreter, arguments : &[Value], closure : usize, globals : &HashMap<String, Box<dyn NewSpeakCallable>>) -> Result<Value, NewError>;
     fn arity(&self) -> usize;
 }
 

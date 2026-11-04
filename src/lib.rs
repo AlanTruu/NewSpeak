@@ -29,12 +29,13 @@ pub mod interpreter_utils {
     use crate::lex::*;
     use crate::grammar::Value;
     use crate::statement::Interpreter;
+    use crate::statement::Scope;
 
     #[derive(Debug, Clone)]
     pub struct Time;
 
     impl NewSpeakCallable for Time {
-        fn call(&self, _env : &crate::statement::Environment, _i : &mut Interpreter, _arguments : &[crate::grammar::Value]) -> Result<crate::grammar::Value, NewError> {
+        fn call(&self, _env : &mut Scope, _i : &mut Interpreter, _arguments : &[crate::grammar::Value], closure : usize, globals : &HashMap<String, Box<dyn NewSpeakCallable>>) -> Result<crate::grammar::Value, NewError> {
             let sys_time = SystemTime::now().duration_since(UNIX_EPOCH);
             match sys_time {
                 Ok(n) => Ok(Value::Number(n.as_secs_f64())),
