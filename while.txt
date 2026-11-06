@@ -2,15 +2,23 @@ var time_1 = time();
 
 var i = 0;
 
-while (truth) {
-    i = i + 1;
-
-    on (i == 10000) {
-        return;
-    } otherwise {
-        redact i;
+while (i < 1000) {
+    {
+        {
+            {
+                {
+                    {
+                        {
+                            {
+                                redact i;
+                                i = i + 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
-
 }
 
 var time_2 = time();

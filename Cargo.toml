@@ -8,3 +8,6 @@ ordered-float = "5.5.1"
 
 [[bin]]
 name = "print"
+
+[profile.release]
+debug = true

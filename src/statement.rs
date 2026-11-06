@@ -5,8 +5,9 @@ use crate::lex::TokenType;
 use std::collections::HashMap;
 use std::fmt::Debug;
 
+/// Interpreter type runs statements and keeps local variables stored
 pub struct Interpreter {
-    pub locals : HashMap<Expr, usize>,
+    pub locals : HashMap<usize, usize>,
 }
 
 #[derive(Debug)]
@@ -52,13 +53,13 @@ impl Interpreter {
     // }
     //
 
-    pub fn resolve(&mut self, name : &Expr, depth : usize) {
-        self.locals.insert(name.clone(), depth);
+    pub fn resolve(&mut self, index : usize, depth : usize) {
+        self.locals.insert(index, depth);
     }
 
-    pub fn look_up_var(&self, name : &Expr) ->  Option<&usize> {
+    pub fn look_up_var(&self, index : &usize) ->  Option<&usize> {
         // println!("Looking up expr: {:?}", name);
-        self.locals.get(name)
+        self.locals.get(index)
     }
 
     pub fn execute(&mut self, stmt : &Stmt, scope : &mut Scope, globals : &HashMap<String, Box<dyn NewSpeakCallable>>) -> Value {
@@ -238,11 +239,7 @@ impl Scope {
     }
 
     pub fn exit_scope(&mut self) {
-        let this = self.environments.pop();
-
-        if let Some(scope) = this {
-            // println!("Scope popped: {:?}", scope);
-        }
+        self.environments.pop();
     }
 
     pub fn get_current_scope(&self) -> &Environment {
@@ -270,14 +267,14 @@ impl Scope {
 
     pub fn evaluate(&mut self, e : &Expr, interpreter : &mut Interpreter, globals : &HashMap<String, Box<dyn NewSpeakCallable>>) -> Result<Value, NewError> {
         match e {
-            Expr::Literal(Value::Nil) => Ok(Value::Nil),
-            Expr::Literal(Value::Identifier(i)) => Ok(Value::Identifier(i.to_owned())),
-            Expr::Literal(Value::String(s)) => Ok(Value::String(s.to_owned())),
-            Expr::Literal(Value::Number(n)) => Ok(Value::Number(n.to_owned())),
-            Expr::Literal(Value::Bool(true)) => Ok(Value::Bool(true)),
-            Expr::Literal(Value::Bool(false)) => Ok(Value::Bool(false)),
-            Expr::Grouping(expr) => self.evaluate(expr, interpreter, globals),
-            Expr::Unary { operator, right } => {
+            Expr::Literal{value : Value::Nil, index} => Ok(Value::Nil),
+            Expr::Literal{value : Value::Identifier(i), index} => Ok(Value::Identifier(i.to_owned())),
+            Expr::Literal{value : Value::String(s), index} => Ok(Value::String(s.to_owned())),
+            Expr::Literal{value : Value::Number(n), index} => Ok(Value::Number(n.to_owned())),
+            Expr::Literal{value : Value::Bool(true), index} => Ok(Value::Bool(true)),
+            Expr::Literal{value: Value::Bool(false), index} => Ok(Value::Bool(false)),
+            Expr::Grouping{group, index} => self.evaluate(group, interpreter, globals),
+            Expr::Unary { operator, right, index } => {
                 let right = self.evaluate(right, interpreter, globals)?;
 
                 if let TokenType::Minus = operator.t && let Value::Number(n) = right {
@@ -290,7 +287,7 @@ impl Scope {
                     Ok(right)
                 }
             },
-            Expr::Binary { left, operator, right } => {
+            Expr::Binary { left, operator, right, index } => {
                 let left = self.evaluate(left, interpreter, globals)?;
                 let right = self.evaluate(right, interpreter, globals)?;
 
@@ -339,34 +336,34 @@ impl Scope {
                     }
                 }
             },
-            Expr::Variable(v) => {
+            Expr::Variable{token, index} => {
                 // println!("Looking for variable expression: {}", v);
-                let dist_or_none = interpreter.look_up_var(e);
+                let dist_or_none = interpreter.look_up_var(index);
 
                 if let Some(dist) = dist_or_none {
-                    let val_or_none = self.get_at(*dist, &v.lexeme);
+                    let val_or_none = self.get_at(*dist, &token.lexeme);
 
                     if let Some(val) = val_or_none {
                         return Ok(val.clone())
                     }
                 }
 
-                interpreter.get(v, self.get_current_scope().index, self)
+                interpreter.get(token, self.get_current_scope().index, self)
             },
-            Expr::Assign { name, val } => {
+            Expr::Assign { name, val, index } => {
                 let val = self.evaluate(&val, interpreter, globals)?;
 
-                let dist_or_none = interpreter.look_up_var(e);
+                let dist_or_none = interpreter.look_up_var(index);
 
                 if let Some(dist) = dist_or_none {
                     self.assign_at(*dist, &name.lexeme, val);
                 } else {
-                    // interpreter.assign(name, val, self.get_current_scope().index, self)?;
+                    interpreter.assign(name, val, self.get_current_scope().index, self)?;
                 }
 
                 Ok(Value::Nil)
             },
-            Expr::Logical { left, operator, right } => {
+            Expr::Logical { left, operator, right, index } => {
                 let left = self.evaluate(left, interpreter, globals)?;
 
                 // short circuiting
@@ -382,7 +379,7 @@ impl Scope {
 
                 self.evaluate(right, interpreter, globals)
             },
-            Expr::Call { callee, paren, args } => {
+            Expr::Call { callee, paren, args, index } => {
                 let res = self.evaluate(callee, interpreter, globals);
 
                 match res {
@@ -406,8 +403,8 @@ impl Scope {
                         callee.call(self, interpreter, &arguments, globals)
                     },
                     Err(_) => {
-                        if let Expr::Variable(v) = &**callee {
-                            let Some(callable) = globals.get(&v.lexeme) else {
+                        if let Expr::Variable{token, index} = &**callee {
+                            let Some(callable) = globals.get(&token.lexeme) else {
                                 return Err(Runtime("Incorrect number of arguments were passed to this function", paren.clone()))
                             };
 

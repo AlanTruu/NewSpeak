@@ -1,8 +1,7 @@
 use std::collections::HashMap;
-use std::hash::Hash;
 use crate::interpreter_utils::NewError;
 use crate::statement::{Interpreter, Stmt};
-use crate::grammar::{Expr, Value};
+use crate::grammar::{Expr};
 use crate::lex::Token;
 
 #[derive(Debug, Clone, Copy)]
@@ -38,11 +37,11 @@ impl <'a>Resolver<'a> {
         match stmt {
             Stmt::Block(block) => {
                 self.begin_scope();
-                self.read(block);
+                self.read(block)?;
                 self.end_scope();
             },
             Stmt::Var { name, initializer } => {
-                self.declare(name);
+                self.declare(name)?;
                 if let Some(initializer) = initializer {
                     self.resolve_expr(initializer)?;
                 }
@@ -54,10 +53,10 @@ impl <'a>Resolver<'a> {
 
             },
             Stmt::Function { name, params : _, body : _ } => {
-                self.declare(name);
+                self.declare(name)?;
                 self.define(name);
 
-                self.resolve_function(stmt, FunctionType::Func);
+                self.resolve_function(stmt, FunctionType::Func)?;
             },
             Stmt::Expression(expr) => {
                 self.resolve_expr(expr)?;
@@ -87,26 +86,25 @@ impl <'a>Resolver<'a> {
                 // println!("resolving print with expression: {:?} \n", val);
                 self.resolve_expr(val)?;
             }
-            _ => ()
         }
 
         Ok(())
     }
 
-    fn resolve_function(&mut self, stmt : &Stmt, func_type : FunctionType) {
+    fn resolve_function(&mut self, stmt : &Stmt, func_type : FunctionType) -> Result<(), NewError> {
         // self.begin_scope();
 
         match stmt {
-            Stmt::Function { name, params, body } => {
+            Stmt::Function { name : _, params, body } => {
                 let func = self.current_func;
                 self.current_func = func_type;
 
                 for param in params {
-                    self.declare(param);
+                    self.declare(param)?;
                     self.define(param);
                 }
 
-                self.read(body);
+                self.read(body)?;
                 self.current_func = func;
             },
             _ => panic!()
@@ -114,46 +112,47 @@ impl <'a>Resolver<'a> {
 
         // self.end_scope();
 
+        Ok(())
     }
 
     fn resolve_expr(&mut self, expr : &Expr) -> Result<(), NewError> {
         match expr {
-            Expr::Variable(name) => {
-                if !self.scopes.is_empty() && let Some(boo) = self.scopes.last().unwrap().get(&name.lexeme)  {
+            Expr::Variable{token, index } => {
+                if !self.scopes.is_empty() && let Some(boo) = self.scopes.last().unwrap().get(&token.lexeme)  {
                     if !boo {
-                        return Err(NewError::Parse("Can't read local variable in its own initializer", name.clone()))
+                        return Err(NewError::Parse("Can't read local variable in its own initializer", token.clone()))
                     }
                 }
 
                 // println!("In resolve_expr with expr {:?}", expr);
 
-                self.resolve_local(expr, &name.lexeme);
+                self.resolve_local(expr, &token.lexeme, *index);
             },
-            Expr::Assign { name, val } => {
+            Expr::Assign { name, val, index } => {
                 self.resolve_expr(val)?;
-                self.resolve_local(expr, &name.lexeme);
+                self.resolve_local(expr, &name.lexeme, *index);
             },
-            Expr::Binary { left, operator : _, right } => {
+            Expr::Binary { left, operator : _, right, index } => {
                 self.resolve_expr(left)?;
                 self.resolve_expr(right)?;
             },
-            Expr::Call { callee, paren : _, args } => {
+            Expr::Call { callee, paren : _, args, index } => {
                 self.resolve_expr(callee)?;
 
                 for expr in args {
                     self.resolve_expr(expr)?;
                 }
             },
-            Expr::Grouping(group) => {
+            Expr::Grouping{group, index} => {
                 self.resolve_expr(group)?;
             },
-            Expr::Literal(lit) => {
+            Expr::Literal{value, index} => {
 
             },
-            Expr::Unary { operator : _, right } => {
+            Expr::Unary { operator : _, right, index } => {
                 self.resolve_expr(right)?;
             },
-            Expr::Logical { left, operator, right } => {
+            Expr::Logical { left, operator : _, right, index } => {
                 self.resolve_expr(left)?;
                 self.resolve_expr(right)?;
             }
@@ -162,11 +161,10 @@ impl <'a>Resolver<'a> {
         Ok(())
     }
 
-    fn resolve_local(&mut self, expr : &Expr, name : &str) {
+    fn resolve_local(&mut self, expr : &Expr, name : &str, index : usize) {
         for (i, scope) in self.scopes.iter().enumerate().rev() {
             if scope.contains_key(name) {
-                // println!("Key with expr {:?} at index {} \n", expr, i);
-                self.interpreter.resolve(expr, i);
+                self.interpreter.resolve(index, i);
                 return
             }
         }
@@ -185,7 +183,7 @@ impl <'a>Resolver<'a> {
 
         let scope = self.scopes.last_mut().unwrap();
 
-        if let Some(var) = scope.get(&name.lexeme) {
+        if let Some(_var) = scope.get(&name.lexeme) {
             return Err(NewError::Runtime("Already a variable with that name", name.clone()))
         }
 

@@ -8,6 +8,7 @@ const MAXIMUM_ARGS : usize = 255;
 
 pub struct Parser {
     pub tokens :  Peekable<std::vec::IntoIter<lex::Token>>,
+    pub index : usize
 }
 
 impl Parser {
@@ -189,7 +190,8 @@ impl Parser {
         if let Some(condition) = condition {
             body = Stmt::While { condition, body : Box::new(body) };
         } else {
-            body = Stmt::While { condition: Expr::Literal(Value::Bool(true)), body : Box::new(body) };
+            body = Stmt::While { condition: Expr::Literal{value : Value::Bool(true), index : self.index + 1}, body : Box::new(body) };
+            self.index += 1;
         }
 
         if let Some(initializer) = initializer {
@@ -339,8 +341,9 @@ impl Parser {
             let val = self.assignment()?;
 
             match expr {
-                Expr::Variable(name) => {
-                    Ok(Expr::Assign { name, val : Box::new(val) })
+                Expr::Variable { token, index }=> {
+                    self.index += 1;
+                    Ok(Expr::Assign { name : token, val : Box::new(val), index })
                 },
                 _ => Err(NewError::Assignment)
             }
@@ -355,7 +358,8 @@ impl Parser {
         while let Some(operator) = self.tokens.next_if(|tok| if let TokenType::Or = tok.t {true} else {false}) {
             let right = self.and()?;
 
-            expr = Expr::Logical { left: Box::new(expr), operator, right : Box::new(right) };
+            expr = Expr::Logical { left: Box::new(expr), operator, right : Box::new(right), index: self.index };
+            self.index += 1;
         }
 
         Ok(expr)
@@ -367,7 +371,8 @@ impl Parser {
         while let Some(operator) = self.tokens.next_if(|tok| if let TokenType::And = tok.t {true} else {false}) {
             let right = self.equality()?;
 
-            expr = Expr::Logical { left: Box::new(expr), operator, right: Box::new(right) };
+            expr = Expr::Logical { left: Box::new(expr), operator, right: Box::new(right), index: self.index };
+            self.index += 1;
         }
 
         Ok(expr)
@@ -385,7 +390,8 @@ impl Parser {
 
             let right = self.comparison()?;
 
-            expr = Expr::Binary { left: Box::new(expr), operator: op, right: Box::new(right) };
+            expr = Expr::Binary { left: Box::new(expr), operator: op, right: Box::new(right), index: self.index };
+            self.index += 1;
         }
 
         Ok(expr)
@@ -402,7 +408,8 @@ impl Parser {
 
             let right = self.term()?;
 
-            expr = Expr::Binary { left: Box::new(expr), operator: op, right: Box::new(right)};
+            expr = Expr::Binary { left: Box::new(expr), operator: op, right: Box::new(right), index : self.index};
+            self.index += 1;
         }
 
         Ok(expr)
@@ -419,7 +426,8 @@ impl Parser {
 
             let right = self.factor()?;
 
-            expr = Expr::Binary { left: Box::new(expr), operator: op, right: Box::new(right)};
+            expr = Expr::Binary { left: Box::new(expr), operator: op, right: Box::new(right), index: self.index};
+            self.index += 1;
         }
 
         Ok(expr)
@@ -436,7 +444,8 @@ impl Parser {
 
             let right = self.unary()?;
 
-            expr = Expr::Binary { left: Box::new(expr), operator: op, right: Box::new(right)};
+            expr = Expr::Binary { left: Box::new(expr), operator: op, right: Box::new(right), index : self.index};
+            self.index += 1;
         }
 
         Ok(expr)
@@ -455,7 +464,11 @@ impl Parser {
                         }
                     })?;
 
-                    return Ok(Expr::Unary { operator: op, right: Box::new(right) })
+                    let res = Ok(Expr::Unary { operator: op, right: Box::new(right), index : self.index });
+                    self.index +=1;
+
+                    return res
+
                 }
                 _=> (),
             }
@@ -510,7 +523,11 @@ impl Parser {
             return Err(NewError::FillInStatement)
         };
 
-        Ok(Expr::Call { callee : Box::new(callee), paren, args })
+        let res = Ok(Expr::Call { callee : Box::new(callee), paren, args, index : self.index });
+
+        self.index += 1;
+
+        res
     }
 
     fn primary(&mut self) -> Result<Expr, NewError> {
@@ -518,12 +535,12 @@ impl Parser {
             let token = self.tokens.next().unwrap();
 
             let res = match &token.t {
-                TokenType::ThoughtCrime => Expr::Literal(Value::Bool(false)),
-                TokenType::Truth => Expr::Literal(Value::Bool(true)),
-                TokenType::Nil => Expr::Literal(Value::Nil),
-                TokenType::Number(n) => Expr::Literal(Value::Number(n.to_owned())),
-                TokenType::String(s) => Expr::Literal(Value::String(s.to_owned())),
-                TokenType::Identifier(_) => Expr::Variable(token) ,
+                TokenType::ThoughtCrime => Expr::Literal{value : Value::Bool(false), index: self.index},
+                TokenType::Truth => Expr::Literal{value : Value::Bool(true), index: self.index},
+                TokenType::Nil => Expr::Literal{value : Value::Nil, index : self.index},
+                TokenType::Number(n) => Expr::Literal{value : Value::Number(n.to_owned()), index: self.index},
+                TokenType::String(s) => Expr::Literal{value : Value::String(s.to_owned()), index : self.index},
+                TokenType::Identifier(_) => Expr::Variable{token, index : self.index} ,
                 TokenType::LeftParen => {
                     let expr = self.expression().inspect_err(|e| {
                         if let NewError::Parse(msg, t) = e {
@@ -540,13 +557,14 @@ impl Parser {
                     };
 
 
-                    Expr::Grouping(Box::new(expr))
+                    Expr::Grouping{group :Box::new(expr), index : self.index}
                 },
 
                 _ =>  return Err(NewError::Parse("Not a valid primary", token))
 
             };
 
+            self.index += 1;
             Ok(res)
 
         } else {

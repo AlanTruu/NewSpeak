@@ -4,11 +4,10 @@
     Project: NewSpeak Interpreter (Treewalk)
 */
 
-
 use std::{env};
-use new_speak::{interpreter_utils::{self, NewError, error, get_globals, get_reserved, report}, lex::TokenType, parser::Parser, resolver::Resolver, statement::{Environment, Interpreter, Scope}};
+use new_speak::{interpreter_utils::{self, NewError, error, get_globals, get_reserved}, lex::TokenType, parser::Parser, resolver::Resolver, statement::{Environment, Interpreter, Scope}};
 use std::collections::HashMap;
-use new_speak::resolver;
+use std::time::Instant;
 
 
 fn main() {
@@ -30,7 +29,7 @@ fn main() {
             println!("{}", token)
         }
 
-        let mut p = Parser {tokens : tokens.into_iter().peekable()};
+        let mut p = Parser {tokens : tokens.into_iter().peekable(), index : 0};
 
         let statements = p.parse().unwrap();
 
@@ -42,16 +41,23 @@ fn main() {
             environments : vec![env]
         };
 
+        let start = Instant::now();
         let mut resolver = Resolver::new(&mut interpreter);
-
         if let Err(NewError::Runtime(message, token)) = resolver.read(&statements) {
             error(&token, message);
         }
+        let duration_resolver = start.elapsed();
 
+
+        let start_int = Instant::now();
         interpreter.interpret(&statements, &mut scope, &get_globals());
+        let duration_interpreter = start_int.elapsed();
+
+
+        println!("Resolver took {:?}", duration_resolver);
+        println!("Interpreter took {:?}", duration_interpreter);
 
         // println!("Interpreter locals: {:?}", interpreter.locals);
-
 
         for e in err {
             println!("Found error {:?}", e);

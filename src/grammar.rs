@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use crate::statement::{Environment, Scope, Stmt};
+use crate::statement::{Scope, Stmt};
 use crate::{interpreter_utils::NewError, lex::Token};
 use crate::statement::{NewSpeakCallable, Interpreter};
 use ordered_float::OrderedFloat;
@@ -8,29 +8,40 @@ use ordered_float::OrderedFloat;
 pub enum Expr {
     Assign {
         name : Token,
-        val : Box<Expr>
+        val : Box<Expr>,
+        index : usize
     },
     Binary {
         left : Box<Expr>,
         operator : Token,
-        right : Box<Expr>
+        right : Box<Expr>,
+        index : usize
     },
     Unary {
         operator : Token,
-        right : Box<Expr>
+        right : Box<Expr>,
+        index : usize
     },
-    Grouping(Box<Expr>),
-    Literal(Value),
-    Variable(Token),
+    Grouping{group : Box<Expr>, index : usize},
+    Literal {
+        value : Value,
+        index : usize
+    },
+    Variable {
+        token : Token,
+        index : usize
+    },
     Logical {
         left : Box<Expr>,
         operator : Token,
-        right : Box<Expr>
+        right : Box<Expr>,
+        index : usize
     },
     Call {
         callee : Box<Expr>,
         paren : Token,
-        args : Vec<Expr>
+        args : Vec<Expr>,
+        index : usize
     }
 }
 
@@ -86,15 +97,15 @@ impl NewSpeakCallable for Value {
 
 pub fn print(e : Expr) -> String {
     match e {
-        Expr::Binary {left, operator, right} => format!("( {} {} {} )", operator.lexeme, print(*left), print(*right)),
-        Expr::Unary { operator, right } => format!("( {} {} )", operator.lexeme, print(*right)),
-        Expr::Grouping(expr) => format!("( group {} )", print(*expr)),
-        Expr::Literal(Value::Number(n)) => format!(" {} ", n),
-        Expr::Literal(Value::String(s)) => format!(" {} ", s),
-        Expr::Literal(Value::Identifier(i)) => format!(" {} ", i),
-        Expr::Literal(Value::Bool(true)) => format!(" truth "),
-        Expr::Literal(Value::Bool(false)) => format!(" thoughtCrime "),
-        Expr::Literal(Value::Nil) => format!(" nil "),
+        Expr::Binary {left, operator, right, index} => format!("( {} {} {} )", operator.lexeme, print(*left), print(*right)),
+        Expr::Unary { operator, right, index } => format!("( {} {} )", operator.lexeme, print(*right)),
+        Expr::Grouping { group, index } => format!("( group {} )", print(*group)),
+        Expr::Literal{value : Value::Number(n), index} => format!(" {} ", n),
+        Expr::Literal{value : Value::String(s), index} => format!(" {} ", s),
+        Expr::Literal{value: Value::Identifier(i), index} => format!(" {} ", i),
+        Expr::Literal{value : Value::Bool(true), index} => format!(" truth "),
+        Expr::Literal{value : Value::Bool(false), index} => format!(" thoughtCrime "),
+        Expr::Literal{value : Value::Nil, index} => format!(" nil "),
         _ => panic!("Unexpected token")
     }
 }

@@ -22,9 +22,9 @@ use crate::interpreter_utils::{get_reserved, get_globals};
 
         let mut reserved = get_reserved();
 
-        let (tokens, errs) = run(contento, &mut reserved);
+        let (tokens, _errs) = run(contento, &mut reserved);
 
-        let mut p = Parser {tokens : tokens.into_iter().peekable()};
+        let mut p = Parser {tokens : tokens.into_iter().peekable(), index : 0};
 
         let statements = p.parse().unwrap();
 
@@ -38,13 +38,13 @@ use crate::interpreter_utils::{get_reserved, get_globals};
 
         let mut resolver = Resolver::new(&mut interpreter);
 
-        resolver.read(&statements);
+        resolver.read(&statements).unwrap();
 
         println!("Interpreter locals: {:?}", interpreter.locals);
 
-        let val = interpreter.interpret(&statements, &mut scope, &get_globals());
+        let _val = interpreter.interpret(&statements, &mut scope, &get_globals());
 
-        assert_matches!(Value::Number(OrderedFloat(100.0)), val);
+        assert_matches!(Value::Number(OrderedFloat(100.0)), _val);
     }
 
 }
