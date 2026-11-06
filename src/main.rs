@@ -6,8 +6,9 @@
 
 
 use std::{env};
-use new_speak::{interpreter_utils::{self, define_reserved, get_globals}, lex::TokenType, parser::Parser, statement::{Environment, Interpreter, Scope}};
+use new_speak::{interpreter_utils::{self, get_reserved, get_globals}, lex::TokenType, parser::Parser, resolver::Resolver, statement::{Environment, Interpreter, Scope}};
 use std::collections::HashMap;
+use new_speak::resolver;
 
 
 fn main() {
@@ -21,7 +22,7 @@ fn main() {
 
         let path = &args[1];
 
-        let mut reserved : HashMap<&str, TokenType> = define_reserved();
+        let mut reserved : HashMap<&str, TokenType> = get_reserved();
 
         let (tokens, err) = interpreter_utils::run_file(path.into(), &mut reserved);
 
@@ -41,7 +42,14 @@ fn main() {
             environments : vec![env]
         };
 
+        let mut resolver = Resolver::new(&mut interpreter);
+
+        resolver.read(&statements);
+
         interpreter.interpret(&statements, &mut scope, &get_globals());
+
+        println!("Interpreter locals: {:?}", interpreter.locals);
+
 
         for e in err {
             println!("Found error {:?}", e);

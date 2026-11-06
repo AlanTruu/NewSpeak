@@ -1,9 +1,10 @@
 // use NewSpeak::{grammar::Expr, lex::{Token, TokenType}};
 // use NewSpeak::grammar::print;
 use new_speak::{lex::{Token, TokenType}, grammar::*};
+use ordered_float::OrderedFloat;
 
 fn main() {
-    let expression = Expr::Binary { left: Box::new(Expr::Unary { operator: Token {t: TokenType::Minus , lexeme : "-".to_string(), line: 1}, right: Box::new(Expr::Literal(Value::Number(123.45))) }), operator: Token { t: TokenType::Star, lexeme: "*".to_string(), line: 1 }, right: Box::new(Expr::Grouping(Box::new(Expr::Literal(Value::Number(45.67))))) };
+    let expression = Expr::Binary { left: Box::new(Expr::Unary { operator: Token {t: TokenType::Minus , lexeme : "-".to_string(), line: 1}, right: Box::new(Expr::Literal(Value::Number(OrderedFloat(123.45)))) }), operator: Token { t: TokenType::Star, lexeme: "*".to_string(), line: 1 }, right: Box::new(Expr::Grouping(Box::new(Expr::Literal(Value::Number(OrderedFloat(45.67)))))) };
 
     let str = print(expression);
 

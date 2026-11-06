@@ -1,15 +1,50 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
-
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use ordered_float::OrderedFloat;
+
+use crate::interpreter_utils::{get_reserved, get_globals};
+    use crate::parser::Parser;
+    use crate::statement::{Interpreter, Environment, Scope};
+    use crate::interpreter_utils::run;
+    use crate::resolver::Resolver;
+    use crate::grammar::Value;
+    use std::assert_matches;
+    use std::collections::HashMap;
 
     #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
+    fn resolve_dbg() {
+        let contento =
+            "var i = 0;
+            while (truth) {
+                redact i;
+                i = i + 1;
+            }";
+
+        let mut reserved = get_reserved();
+
+        let (tokens, errs) = run(contento, &mut reserved);
+
+        let mut p = Parser {tokens : tokens.into_iter().peekable()};
+
+        let statements = p.parse().unwrap();
+
+        let env = Environment {values : HashMap::new(), index : 0};
+
+        let mut interpreter = Interpreter::new();
+
+        let mut scope = Scope {
+            environments : vec![env]
+        };
+
+        let mut resolver = Resolver::new(&mut interpreter);
+
+        resolver.read(&statements);
+
+        println!("Interpreter locals: {:?}", interpreter.locals);
+
+        let val = interpreter.interpret(&statements, &mut scope, &get_globals());
+
+        assert_matches!(Value::Number(OrderedFloat(100.0)), val);
     }
 
 }
@@ -30,6 +65,7 @@ pub mod interpreter_utils {
     use crate::grammar::Value;
     use crate::statement::Interpreter;
     use crate::statement::Scope;
+    use ordered_float::OrderedFloat;
 
     #[derive(Debug, Clone)]
     pub struct Time;
@@ -38,7 +74,7 @@ pub mod interpreter_utils {
         fn call(&self, _env : &mut Scope, _i : &mut Interpreter, _arguments : &[crate::grammar::Value],  _globals : &HashMap<String, Box<dyn NewSpeakCallable>>) -> Result<crate::grammar::Value, NewError> {
             let sys_time = SystemTime::now().duration_since(UNIX_EPOCH);
             match sys_time {
-                Ok(n) => Ok(Value::Number(n.as_secs_f64())),
+                Ok(n) => Ok(Value::Number(OrderedFloat(n.as_secs_f64()))),
                 Err(_) => Err(NewError::NativeFunctionFail)
             }
         }
@@ -60,13 +96,13 @@ pub mod interpreter_utils {
         NativeFunctionFail
     }
 
-    pub fn run_file(path : PathBuf, reserved: &mut HashMap<&str, TokenType>) -> (Vec<Token>, Vec<NewError>) {
+    pub fn run_file(path : PathBuf, reserved: &HashMap<&str, TokenType>) -> (Vec<Token>, Vec<NewError>) {
         let contents = fs::read_to_string(path).expect("Unable to read file");
 
         run(&contents, reserved)
     }
 
-    pub fn run(contents : &str, reserved: &mut HashMap<&str, TokenType>) -> (Vec<Token>, Vec<NewError>) {
+    pub fn run(contents : &str, reserved: &HashMap<&str, TokenType>) -> (Vec<Token>, Vec<NewError>) {
         scan(contents, reserved)
     }
 
@@ -89,7 +125,7 @@ pub mod interpreter_utils {
         globals
     }
 
-    pub fn define_reserved() -> HashMap<&'static str, TokenType> {
+    pub fn get_reserved() -> HashMap<&'static str, TokenType> {
         let mut reserved : HashMap<&str, TokenType> = HashMap::new();
         reserved.insert("and", TokenType::And);
         reserved.insert("class", TokenType::Class);

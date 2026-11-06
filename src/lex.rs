@@ -1,8 +1,10 @@
+use ordered_float::OrderedFloat;
+
 use crate::{interpreter_utils::NewError};
 use std::collections::HashMap;
 use std::fmt::{self};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TokenType {
 
     // Single character tokens
@@ -31,7 +33,7 @@ pub enum TokenType {
     // Literals
     Identifier(String),
     String(String),
-    Number(f64),
+    Number(OrderedFloat<f64>),
 
     // keywords
     And,
@@ -58,7 +60,7 @@ pub enum TokenType {
     EOF
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Token {
     pub t : TokenType,
     pub lexeme : String,
@@ -87,7 +89,7 @@ impl fmt::Display for Token {
 
 
 // scan file
-pub fn scan(source : &str, reserved: &mut HashMap<&str, TokenType>) -> (Vec<Token>, Vec<NewError>) {
+pub fn scan(source : &str, reserved: &HashMap<&str, TokenType>) -> (Vec<Token>, Vec<NewError>) {
     let mut tokens : Vec<Token> = Vec::new();
     let mut errors : Vec<NewError> = Vec::new();
 
@@ -206,7 +208,7 @@ pub fn scan(source : &str, reserved: &mut HashMap<&str, TokenType>) -> (Vec<Toke
                     let float = num.parse::<f64>();
 
                     if let Ok(f) = float {
-                        (TokenType::Number(f), lexeme)
+                        (TokenType::Number(OrderedFloat(f)), lexeme)
                     } else {
                         errors.push(NewError::Syntax("Not a number: ", line_number));
                         continue

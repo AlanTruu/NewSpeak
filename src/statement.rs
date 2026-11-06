@@ -6,26 +6,12 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 
 pub struct Interpreter {
-    locals : HashMap<String, usize>,
+    pub locals : HashMap<Expr, usize>,
 }
 
 #[derive(Debug)]
 pub struct Scope {
     pub environments : Vec<Environment>
-}
-
-impl Scope {
-    pub fn exit_scope(&mut self) {
-        self.environments.pop();
-    }
-
-    pub fn get_current_scope(&self) -> &Environment {
-        self.environments.last().unwrap()
-    }
-
-    pub fn get_current_mut_scope(&mut self) ->  &mut Environment {
-        self.environments.last_mut().unwrap()
-    }
 }
 
 impl Interpreter {
@@ -41,12 +27,11 @@ impl Interpreter {
         match val_or_none {
             Some(val) => Ok(val.clone()),
             None => {
-                    if index > 0 {
-                        return self.get(name, index - 1, scope)
-                    } else {
-                        return Err(NewError::Runtime("Undefined variable", name.clone()))
-                    }
-
+                if index > 0 {
+                    return self.get(name, index - 1, scope)
+                } else {
+                    return Err(NewError::Runtime("Undefined variable", name.clone()))
+                }
             }
         }
     }
@@ -65,12 +50,14 @@ impl Interpreter {
     // pub fn find(&self, name : &Token) -> Option<&Value> {
     //     self.get_current_scope().values.get(&name.lexeme)
     // }
+    //
 
-    pub fn resolve(&mut self, name : &str, depth : usize) {
-        self.locals.insert(name.to_string(), depth);
+    pub fn resolve(&mut self, name : &Expr, depth : usize) {
+        self.locals.insert(name.clone(), depth);
     }
 
-    pub fn look_up_var(&self, name : &str) ->  Option<&usize>{
+    pub fn look_up_var(&self, name : &Expr) ->  Option<&usize> {
+        // println!("Looking up expr: {:?}", name);
         self.locals.get(name)
     }
 
@@ -146,7 +133,6 @@ impl Interpreter {
                 Value::Nil
             },
             Stmt::Block(statements) => {
-
                 let inner_env = Environment {
                     values : HashMap::new(),
                     index : scope.get_current_scope().index + 1
@@ -155,10 +141,10 @@ impl Interpreter {
                 scope.environments.push(inner_env);
 
                 if let Value::ReturnVal(val) = self.interpret(statements, scope, globals) {
-                    scope.environments.pop();
+                    scope.exit_scope();
                     return Value::ReturnVal(val)
                 } else {
-                    scope.environments.pop();
+                    scope.exit_scope();
                     Value::Nil
                 }
             },
@@ -199,6 +185,7 @@ impl Interpreter {
                 Value::Nil
             },
             Stmt::Function { name, params, body } => {
+
                 let func = Value::Function{params: params.clone(), body : body.clone(), closure_index : scope.get_current_scope().index};
 
                 scope.define(&name.lexeme, func);
@@ -248,6 +235,31 @@ impl Scope {
         Self {
             environments : Vec::new()
         }
+    }
+
+    pub fn exit_scope(&mut self) {
+        let this = self.environments.pop();
+
+        if let Some(scope) = this {
+            // println!("Scope popped: {:?}", scope);
+        }
+    }
+
+    pub fn get_current_scope(&self) -> &Environment {
+        self.environments.last().unwrap()
+    }
+
+    pub fn get_current_mut_scope(&mut self) ->  &mut Environment {
+        self.environments.last_mut().unwrap()
+    }
+
+    pub fn get_at(&self, distance : usize, name : &str, ) -> Option<&Value> {
+        // println!("Getting value at dist {} with name {}", distance, name);
+        self.environments[distance].values.get(name)
+    }
+
+    pub fn assign_at(&mut self, distance : usize, name : &str, val : Value) {
+        self.environments[distance].values.insert(name.to_string(), val);
     }
 
     pub fn from(source : &[Environment]) -> Self {
@@ -328,23 +340,30 @@ impl Scope {
                 }
             },
             Expr::Variable(v) => {
-//                 let dist_or_none = interpreter.look_up_var(&v.lexeme);
-//
-//                 if let Some(dist) = dist_or_none {
-//                     // find var
-//                 } else {
-//                     // check in globals
-//                     todo!()
-//                 }
+                println!("Looking for variable expression: {}", v);
+                let dist_or_none = interpreter.look_up_var(e);
+
+                if let Some(dist) = dist_or_none {
+                    let val_or_none = self.get_at(*dist, &v.lexeme);
+
+                    if let Some(val) = val_or_none {
+
+                        return Ok(val.clone())
+                    }
+                }
 
                 interpreter.get(v, self.get_current_scope().index, self)
-
-                // Ok(interpreter.get(v, self.get_current_scope().index, &self)?)
             },
             Expr::Assign { name, val } => {
                 let val = self.evaluate(&val, interpreter, globals)?;
 
-                interpreter.assign(name, val, self.get_current_scope().index, self)?;
+                let dist_or_none = interpreter.look_up_var(e);
+
+                if let Some(dist) = dist_or_none {
+                    self.assign_at(*dist, &name.lexeme, val);
+                } else {
+                    interpreter.assign(name, val, self.get_current_scope().index, self)?;
+                }
 
                 Ok(Value::Nil)
             },
@@ -409,7 +428,7 @@ impl Scope {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Stmt {
     Print(Expr),
     Expression(Expr),

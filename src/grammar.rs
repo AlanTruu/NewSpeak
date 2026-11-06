@@ -1,9 +1,10 @@
 use std::collections::HashMap;
-use crate::statement::{Scope, Stmt};
+use crate::statement::{Environment, Scope, Stmt};
 use crate::{interpreter_utils::NewError, lex::Token};
 use crate::statement::{NewSpeakCallable, Interpreter};
+use ordered_float::OrderedFloat;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Expr {
     Assign {
         name : Token,
@@ -33,9 +34,9 @@ pub enum Expr {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Value {
-    Number(f64),
+    Number(OrderedFloat<f64>),
     String(String),
     Bool(bool),
     Nil,
@@ -58,12 +59,16 @@ impl NewSpeakCallable for Value {
                     new_scope.define(&params[i].lexeme, arguments[i].clone());
                 }
 
+                // println!("Interpreter locals in call() {:?}", i.locals);
+                // println!("With body {:?}", body);
+
                 match i.interpret(body, &mut new_scope, globals) {
                     Value::ReturnVal(value) => {
                         return Ok(*value)
                     },
                     _ => ()
                 }
+
 
                 Ok(Value::Nil)
             },

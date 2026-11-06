@@ -1,15 +1,23 @@
 use std::collections::HashMap;
+use std::hash::Hash;
 use crate::interpreter_utils::NewError;
 use crate::statement::{Interpreter, Stmt};
-use crate::grammar::Expr;
+use crate::grammar::{Expr, Value};
 use crate::lex::Token;
 
-struct Resolver {
+pub struct Resolver<'a> {
     scopes : Vec<HashMap<String, bool>>,
-    interpreter : Interpreter
+    interpreter : &'a mut Interpreter
 }
 
-impl Resolver {
+impl <'a>Resolver<'a> {
+    pub fn new(interpreter : &'a mut Interpreter) -> Self {
+        Self {
+            scopes : vec![HashMap::new()],
+            interpreter
+        }
+    }
+
     pub fn read(&mut self, stmts : &[Stmt]) {
         for statements in stmts {
             self.resolve_statement(statements).unwrap();
@@ -23,10 +31,17 @@ impl Resolver {
                 self.read(block);
                 self.end_scope();
             },
-            Stmt::Var { name : _, initializer } => {
+            Stmt::Var { name, initializer } => {
+                self.declare(name);
                 if let Some(initializer) = initializer {
                     self.resolve_expr(initializer)?;
                 }
+                self.define(name);
+
+                // let var = Expr::Variable(name.clone());
+                // println!("Resolving var {:?} \n", var);
+                // self.resolve_local(&var, &name.lexeme);
+
             },
             Stmt::Function { name, params : _, body : _ } => {
                 self.declare(name);
@@ -55,6 +70,7 @@ impl Resolver {
                 self.resolve_statement(body)?;
             },
             Stmt::Print(val) => {
+                // println!("resolving print with expression: {:?} \n", val);
                 self.resolve_expr(val)?;
             }
             _ => ()
@@ -64,13 +80,13 @@ impl Resolver {
     }
 
     fn resolve_function(&mut self, stmt : &Stmt) {
-        self.begin_scope();
+        // self.begin_scope();
 
         match stmt {
             Stmt::Function { name, params, body } => {
                 for param in params {
                     self.declare(param);
-                    self.define(name);
+                    self.define(param);
                 }
 
                 self.read(body);
@@ -78,30 +94,29 @@ impl Resolver {
             _ => panic!()
         }
 
-        self.end_scope();
+        // self.end_scope();
     }
 
-    fn resolve_expr(&mut self, expr : &Expr)-> Result<(), NewError> {
+    fn resolve_expr(&mut self, expr : &Expr) -> Result<(), NewError> {
         match expr {
             Expr::Variable(name) => {
                 if !self.scopes.is_empty() && let Some(boo) = self.scopes.last().unwrap().get(&name.lexeme)  {
                     if !boo {
                         return Err(NewError::Parse("Can't read local variable in its own initializer", name.clone()))
                     }
-
-                    self.resolve_local(expr, &name.lexeme);
                 }
+
+                println!("In resolve_expr with expr {:?}", expr);
+
+                self.resolve_local(expr, &name.lexeme);
             },
             Expr::Assign { name, val } => {
                 self.resolve_expr(val)?;
                 self.resolve_local(expr, &name.lexeme);
-
             },
             Expr::Binary { left, operator : _, right } => {
                 self.resolve_expr(left)?;
                 self.resolve_expr(right)?;
-
-
             },
             Expr::Call { callee, paren : _, args } => {
                 self.resolve_expr(callee)?;
@@ -109,29 +124,30 @@ impl Resolver {
                 for expr in args {
                     self.resolve_expr(expr)?;
                 }
-
             },
             Expr::Grouping(group) => {
                 self.resolve_expr(group)?;
             },
-            Expr::Literal(_lit) => {
+            Expr::Literal(lit) => {
 
             },
             Expr::Unary { operator : _, right } => {
                 self.resolve_expr(right)?;
+            },
+            Expr::Logical { left, operator, right } => {
+                self.resolve_expr(left)?;
+                self.resolve_expr(right)?;
             }
-            _ => todo!()
         }
 
         Ok(())
     }
 
     fn resolve_local(&mut self, expr : &Expr, name : &str) {
-        let length = self.scopes.len();
-
-        for (i, scope) in self.scopes.iter().rev().enumerate() {
+        for (i, scope) in self.scopes.iter().enumerate().rev() {
             if scope.contains_key(name) {
-                self.interpreter.resolve(name, length - 1 - i);
+                println!("Key with expr {:?} at index {} \n", expr, i);
+                self.interpreter.resolve(expr, i);
                 return
             }
         }

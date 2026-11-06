@@ -1,8 +1,17 @@
+var time_1 = time();
+
 var i = 0;
 
 while (truth) {
-    redact i;
     i = i + 1;
+
+    on (i == 10000) {
+        return;
+    } otherwise {
+        redact i;
+    }
+
 }
 
-x = 0;
+var time_2 = time();
+redact time_2 - time_1;

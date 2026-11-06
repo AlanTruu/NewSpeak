@@ -22,5 +22,7 @@ var time_3 = time();
 branch(1);
 var time_4 = time();
 
-redact time_2 - time_1;
-redact time_4 - time_3;
+var diff_1 = time_2 - time_1;
+var diff_2 = time_4 - time_3;
+redact diff_1;
+redact diff_2;
