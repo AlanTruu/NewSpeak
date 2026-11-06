@@ -5,23 +5,33 @@ use crate::statement::{Interpreter, Stmt};
 use crate::grammar::{Expr, Value};
 use crate::lex::Token;
 
+#[derive(Debug, Clone, Copy)]
+pub enum FunctionType {
+    Func,
+    NaF
+}
+
 pub struct Resolver<'a> {
     scopes : Vec<HashMap<String, bool>>,
-    interpreter : &'a mut Interpreter
+    interpreter : &'a mut Interpreter,
+    current_func : FunctionType
 }
 
 impl <'a>Resolver<'a> {
     pub fn new(interpreter : &'a mut Interpreter) -> Self {
         Self {
             scopes : vec![HashMap::new()],
+            current_func : FunctionType::NaF,
             interpreter
         }
     }
 
-    pub fn read(&mut self, stmts : &[Stmt]) {
+    pub fn read(&mut self, stmts : &[Stmt]) -> Result<(), NewError> {
         for statements in stmts {
-            self.resolve_statement(statements).unwrap();
+            self.resolve_statement(statements)?;
         }
+
+        Ok(())
     }
 
     fn resolve_statement(&mut self, stmt : &Stmt) -> Result<(), NewError> {
@@ -47,7 +57,7 @@ impl <'a>Resolver<'a> {
                 self.declare(name);
                 self.define(name);
 
-                self.resolve_function(stmt);
+                self.resolve_function(stmt, FunctionType::Func);
             },
             Stmt::Expression(expr) => {
                 self.resolve_expr(expr)?;
@@ -60,7 +70,11 @@ impl <'a>Resolver<'a> {
                     self.resolve_statement(otherwise_stmt)?;
                 }
             },
-            Stmt::Return { keyword : _, value } => {
+            Stmt::Return { keyword , value } => {
+                if let FunctionType::NaF = self.current_func {
+                    return Err(NewError::Runtime("Cannot return from top-level code", keyword.clone()))
+                }
+
                 if let Some(val) = value {
                     self.resolve_expr(val)?;
                 }
@@ -79,22 +93,27 @@ impl <'a>Resolver<'a> {
         Ok(())
     }
 
-    fn resolve_function(&mut self, stmt : &Stmt) {
+    fn resolve_function(&mut self, stmt : &Stmt, func_type : FunctionType) {
         // self.begin_scope();
 
         match stmt {
             Stmt::Function { name, params, body } => {
+                let func = self.current_func;
+                self.current_func = func_type;
+
                 for param in params {
                     self.declare(param);
                     self.define(param);
                 }
 
                 self.read(body);
+                self.current_func = func;
             },
             _ => panic!()
         }
 
         // self.end_scope();
+
     }
 
     fn resolve_expr(&mut self, expr : &Expr) -> Result<(), NewError> {
@@ -106,7 +125,7 @@ impl <'a>Resolver<'a> {
                     }
                 }
 
-                println!("In resolve_expr with expr {:?}", expr);
+                // println!("In resolve_expr with expr {:?}", expr);
 
                 self.resolve_local(expr, &name.lexeme);
             },
@@ -146,7 +165,7 @@ impl <'a>Resolver<'a> {
     fn resolve_local(&mut self, expr : &Expr, name : &str) {
         for (i, scope) in self.scopes.iter().enumerate().rev() {
             if scope.contains_key(name) {
-                println!("Key with expr {:?} at index {} \n", expr, i);
+                // println!("Key with expr {:?} at index {} \n", expr, i);
                 self.interpreter.resolve(expr, i);
                 return
             }
@@ -161,12 +180,18 @@ impl <'a>Resolver<'a> {
         self.scopes.pop();
     }
 
-    pub fn declare(&mut self, name : &Token) {
-        if self.scopes.is_empty() {return}
+    pub fn declare(&mut self, name : &Token) -> Result<(), NewError> {
+        if self.scopes.is_empty() {return Ok(())}
 
         let scope = self.scopes.last_mut().unwrap();
 
+        if let Some(var) = scope.get(&name.lexeme) {
+            return Err(NewError::Runtime("Already a variable with that name", name.clone()))
+        }
+
         scope.insert(name.lexeme.clone(), false);
+
+        Ok(())
     }
 
     pub fn define(&mut self, name : &Token) {

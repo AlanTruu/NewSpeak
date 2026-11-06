@@ -253,7 +253,7 @@ impl Scope {
         self.environments.last_mut().unwrap()
     }
 
-    pub fn get_at(&self, distance : usize, name : &str, ) -> Option<&Value> {
+    pub fn get_at(&self, distance : usize, name : &str) -> Option<&Value> {
         // println!("Getting value at dist {} with name {}", distance, name);
         self.environments[distance].values.get(name)
     }
@@ -340,14 +340,13 @@ impl Scope {
                 }
             },
             Expr::Variable(v) => {
-                println!("Looking for variable expression: {}", v);
+                // println!("Looking for variable expression: {}", v);
                 let dist_or_none = interpreter.look_up_var(e);
 
                 if let Some(dist) = dist_or_none {
                     let val_or_none = self.get_at(*dist, &v.lexeme);
 
                     if let Some(val) = val_or_none {
-
                         return Ok(val.clone())
                     }
                 }
@@ -362,7 +361,7 @@ impl Scope {
                 if let Some(dist) = dist_or_none {
                     self.assign_at(*dist, &name.lexeme, val);
                 } else {
-                    interpreter.assign(name, val, self.get_current_scope().index, self)?;
+                    // interpreter.assign(name, val, self.get_current_scope().index, self)?;
                 }
 
                 Ok(Value::Nil)

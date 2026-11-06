@@ -6,7 +6,7 @@
 
 
 use std::{env};
-use new_speak::{interpreter_utils::{self, get_reserved, get_globals}, lex::TokenType, parser::Parser, resolver::Resolver, statement::{Environment, Interpreter, Scope}};
+use new_speak::{interpreter_utils::{self, NewError, error, get_globals, get_reserved, report}, lex::TokenType, parser::Parser, resolver::Resolver, statement::{Environment, Interpreter, Scope}};
 use std::collections::HashMap;
 use new_speak::resolver;
 
@@ -44,11 +44,13 @@ fn main() {
 
         let mut resolver = Resolver::new(&mut interpreter);
 
-        resolver.read(&statements);
+        if let Err(NewError::Runtime(message, token)) = resolver.read(&statements) {
+            error(&token, message);
+        }
 
         interpreter.interpret(&statements, &mut scope, &get_globals());
 
-        println!("Interpreter locals: {:?}", interpreter.locals);
+        // println!("Interpreter locals: {:?}", interpreter.locals);
 
 
         for e in err {
