@@ -7,7 +7,8 @@ use crate::lex::Token;
 #[derive(Debug, Clone, Copy)]
 pub enum FunctionType {
     Func,
-    NaF
+    NaF,
+    Method
 }
 
 pub struct Resolver<'a> {
@@ -46,11 +47,6 @@ impl <'a>Resolver<'a> {
                     self.resolve_expr(initializer)?;
                 }
                 self.define(name);
-
-                // let var = Expr::Variable(name.clone());
-                // println!("Resolving var {:?} \n", var);
-                // self.resolve_local(&var, &name.lexeme);
-
             },
             Stmt::Function { name, params : _, body : _ } => {
                 self.declare(name)?;
@@ -85,6 +81,16 @@ impl <'a>Resolver<'a> {
             Stmt::Print(val) => {
                 // println!("resolving print with expression: {:?} \n", val);
                 self.resolve_expr(val)?;
+            },
+            Stmt::Class { name, methods } => {
+                self.declare(name)?;
+                self.define(name);
+
+                for method in methods {
+                    let declaration = FunctionType::Method;
+
+                    self.resolve_function(method, declaration)?;
+                }
             }
         }
 
@@ -107,7 +113,7 @@ impl <'a>Resolver<'a> {
                 self.read(body)?;
                 self.current_func = func;
             },
-            _ => panic!()
+            _ => panic!("Not a function")
         }
 
         // self.end_scope();
@@ -126,42 +132,49 @@ impl <'a>Resolver<'a> {
 
                 // println!("In resolve_expr with expr {:?}", expr);
 
-                self.resolve_local(expr, &token.lexeme, *index);
+                self.resolve_local(&token.lexeme, *index);
             },
             Expr::Assign { name, val, index } => {
                 self.resolve_expr(val)?;
-                self.resolve_local(expr, &name.lexeme, *index);
+                self.resolve_local(&name.lexeme, *index);
             },
-            Expr::Binary { left, operator : _, right, index } => {
+            Expr::Binary { left, operator : _, right, index : _ } => {
                 self.resolve_expr(left)?;
                 self.resolve_expr(right)?;
             },
-            Expr::Call { callee, paren : _, args, index } => {
+            Expr::Call { callee, paren : _, args, index : _ } => {
                 self.resolve_expr(callee)?;
 
                 for expr in args {
                     self.resolve_expr(expr)?;
                 }
             },
-            Expr::Grouping{group, index} => {
+            Expr::Grouping{group, index : _} => {
                 self.resolve_expr(group)?;
             },
-            Expr::Literal{value, index} => {
+            Expr::Literal{value : _, index : _} => {
 
             },
-            Expr::Unary { operator : _, right, index } => {
+            Expr::Unary { operator : _, right, index : _ } => {
                 self.resolve_expr(right)?;
             },
-            Expr::Logical { left, operator : _, right, index } => {
+            Expr::Logical { left, operator : _, right, index : _ } => {
                 self.resolve_expr(left)?;
                 self.resolve_expr(right)?;
+            },
+            Expr::Get { object, name : _ , index : _} => {
+                self.resolve_expr(object)?;
+            },
+            Expr::Set { object, name : _, value, index : _ } => {
+                self.resolve_expr(value)?;
+                self.resolve_expr(object)?;
             }
         }
 
         Ok(())
     }
 
-    fn resolve_local(&mut self, expr : &Expr, name : &str, index : usize) {
+    fn resolve_local(&mut self, name : &str, index : usize) {
         for (i, scope) in self.scopes.iter().enumerate().rev() {
             if scope.contains_key(name) {
                 self.interpreter.resolve(index, i);

@@ -1,0 +1,9 @@
+class Ministry {
+    func work() {
+        return "2+2";
+    }
+}
+
+var love = Ministry();
+love.room = 101;
+ministry.work();

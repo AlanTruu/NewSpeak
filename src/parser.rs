@@ -36,12 +36,44 @@ impl Parser {
             self.var_declaration()
         } else if let Some(token) = self.tokens.peek() && let TokenType::Func = token.t {
             self.function("function")
+        } else if let Some(token) = self.tokens.peek() && let TokenType::Class = token.t {
+            self.class_declaration()
         } else {
             self.statement()
         }
     }
 
-    fn function(&mut self, _kind : &str) -> Result<Stmt, NewError> {
+    fn class_declaration(&mut self) -> Result<Stmt, NewError> {
+        let class_token = self.tokens.next().unwrap();
+
+        let Some(name) = self.tokens.next() else {
+            return Err(NewError::Parse("Expected class name", class_token))
+        };
+
+        let Some(left_brace_token) = self.tokens.next_if(|token| if let TokenType::LeftBrace = token.t {true} else {false}) else {
+            return Err(NewError::Parse("Expected '{' before class body", class_token))
+        };
+
+        let mut methods = Vec::new();
+
+        loop {
+            if let Some(token) = self.tokens.peek() && let TokenType::RightBrace = token.t {
+                break;
+            } else if self.tokens.len() == 0 {
+                break;
+            }
+
+            methods.push(self.function("method")?);
+        }
+
+        let Some(_right_brace_token) = self.tokens.next_if(|token| if let TokenType::RightBrace = token.t {true} else {false}) else {
+            return Err(NewError::Parse("Expected '}' after class body", left_brace_token))
+        };
+
+        Ok(Stmt::Class { name, methods })
+    }
+
+    fn function(&mut self, kind : &str) -> Result<Stmt, NewError> {
         // Consume func keyword
         let func_token = self.tokens.next().unwrap();
 
@@ -345,6 +377,10 @@ impl Parser {
                     self.index += 1;
                     Ok(Expr::Assign { name : token, val : Box::new(val), index })
                 },
+                Expr::Get { object, name, index } => {
+                    self.index += 1;
+                    Ok(Expr::Set { object, name, value: Box::new(val), index })
+                }
                 _ => Err(NewError::Assignment)
             }
         } else {
@@ -481,9 +517,17 @@ impl Parser {
         // get callee/function name
         let mut expr = self.primary()?;
 
+        // check for function call () or property access .
         loop {
             if let Some(_tok) = self.tokens.next_if(|tok| if let TokenType::LeftParen = tok.t {true} else {false}) {
                 expr = self.finish_call(expr)?;
+            } else if let Some(token_dot) = self.tokens.next_if(|tok| if let TokenType::Dot = tok.t {true} else {false}) {
+                let Some(name) = self.tokens.next_if(|tok| if let TokenType::Identifier(_) = tok.t {true} else {false}) else {
+                    return Err(NewError::Parse("Expected property name after '.'", token_dot))
+                };
+
+                expr = Expr::Get { object: Box::new(expr), name,  index : self.index};
+                self.index += 1;
             } else {
                 break;
             }

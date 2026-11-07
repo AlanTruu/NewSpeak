@@ -22,17 +22,16 @@ func loop(max) {
 }
 
 func noth() {
-    redact "noth";
+    return "noth";
 }
 
 loop(100);
-noth();
 say_hi("Dear", "Reader");
 say_hi("Leon", "Osborne");
 
 var first = "What the";
 redact first;
-
+redact noth();
 var time_2 = time();
 
 redact time_2;

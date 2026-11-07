@@ -2,6 +2,7 @@ use crate::grammar::{Expr, Value, is_equal, is_truthy};
 use crate::lex::Token;
 use crate::interpreter_utils::{NewError, NewError::Runtime};
 use crate::lex::TokenType;
+use crate::class::NsClass;
 use std::collections::HashMap;
 use std::fmt::Debug;
 
@@ -48,11 +49,6 @@ impl Interpreter {
         }
     }
 
-    // pub fn find(&self, name : &Token) -> Option<&Value> {
-    //     self.get_current_scope().values.get(&name.lexeme)
-    // }
-    //
-
     pub fn resolve(&mut self, index : usize, depth : usize) {
         self.locals.insert(index, depth);
     }
@@ -70,38 +66,23 @@ impl Interpreter {
                 match val_or_err {
                     Ok(val) => {
                         match val {
-                            Value::Bool(false) => {
-                                println!("thoughtCrime");
-                                Value::Nil
-                            },
-                            Value::Bool(true) =>{
-                                println!("truth");
-                                Value::Nil
-                            },
-                            Value::Number(n) =>{
-                                println!("{}", n);
-                                Value::Nil
-                            },
-                            Value::String(s) =>{
-                                println!("{}", s);
-                                Value::Nil
-                            },
-                            Value::Identifier(i) =>{
-                                println!("{}", i);
-                                Value::Nil
-                            },
-                            Value::Nil =>{
-                                println!("nil");
-                                Value::Nil
-                            },
+                            Value::Bool(false) => println!("thoughtCrime"),
+                            Value::Bool(true) => println!("truth"),
+                            Value::Number(n) => println!("{}", n),
+                            Value::String(s) => println!("{}", s),
+                            Value::Identifier(i) => println!("{}", i),
+                            Value::Nil =>println!("nil"),
+                            Value::Class(class) => println!("{}", class.to_string()),
+                            Value::Instance(instance) => println!("{}", instance.borrow().to_string()),
                             _=> todo!()
                         }
                     },
                     Err(e) =>{
                         eprintln!("{:?}", e);
-                        Value::Nil
+
                     }
                 }
+                Value::Nil
             },
             Stmt::Expression(expr) => {
                 let val_or_err = scope.evaluate(expr, self, globals);
@@ -189,9 +170,9 @@ impl Interpreter {
 
                 let func = Value::Function{params: params.clone(), body : body.clone(), closure_index : scope.get_current_scope().index};
 
-                scope.define(&name.lexeme, func);
+                scope.define(&name.lexeme, func.clone());
 
-                Value::Nil
+                func
             },
             Stmt::Return { keyword : _, value } => {
                 if let Some(value) = value {
@@ -207,6 +188,26 @@ impl Interpreter {
                     }
                 }
 
+                Value::Nil
+            },
+            Stmt::Class { name, methods } => {
+                scope.define(&name.lexeme, Value::Nil);
+
+                let mut methods_map : HashMap<String, Value> = HashMap::new();
+
+                for method in methods {
+                    let Stmt::Function { name, params : _, body : _ } = method else {
+                        panic!("Not a method")
+                    };
+
+                    let value = self.execute(method, scope, globals);
+
+                    methods_map.insert(name.lexeme.clone(), value);
+                }
+
+                let class = NsClass::new(&name.lexeme, methods_map);
+                let class = Value::Class(class);
+                scope.define(&name.lexeme, class);
                 Value::Nil
             }
         }
@@ -267,14 +268,14 @@ impl Scope {
 
     pub fn evaluate(&mut self, e : &Expr, interpreter : &mut Interpreter, globals : &HashMap<String, Box<dyn NewSpeakCallable>>) -> Result<Value, NewError> {
         match e {
-            Expr::Literal{value : Value::Nil, index} => Ok(Value::Nil),
-            Expr::Literal{value : Value::Identifier(i), index} => Ok(Value::Identifier(i.to_owned())),
-            Expr::Literal{value : Value::String(s), index} => Ok(Value::String(s.to_owned())),
-            Expr::Literal{value : Value::Number(n), index} => Ok(Value::Number(n.to_owned())),
-            Expr::Literal{value : Value::Bool(true), index} => Ok(Value::Bool(true)),
-            Expr::Literal{value: Value::Bool(false), index} => Ok(Value::Bool(false)),
-            Expr::Grouping{group, index} => self.evaluate(group, interpreter, globals),
-            Expr::Unary { operator, right, index } => {
+            Expr::Literal{value : Value::Nil, index : _} => Ok(Value::Nil),
+            Expr::Literal{value : Value::Identifier(i), index : _} => Ok(Value::Identifier(i.to_owned())),
+            Expr::Literal{value : Value::String(s), index : _} => Ok(Value::String(s.to_owned())),
+            Expr::Literal{value : Value::Number(n), index : _} => Ok(Value::Number(n.to_owned())),
+            Expr::Literal{value : Value::Bool(true), index : _} => Ok(Value::Bool(true)),
+            Expr::Literal{value: Value::Bool(false), index : _} => Ok(Value::Bool(false)),
+            Expr::Grouping{group, index : _} => self.evaluate(group, interpreter, globals),
+            Expr::Unary { operator, right, index : _ } => {
                 let right = self.evaluate(right, interpreter, globals)?;
 
                 if let TokenType::Minus = operator.t && let Value::Number(n) = right {
@@ -287,7 +288,7 @@ impl Scope {
                     Ok(right)
                 }
             },
-            Expr::Binary { left, operator, right, index } => {
+            Expr::Binary { left, operator, right, index : _ } => {
                 let left = self.evaluate(left, interpreter, globals)?;
                 let right = self.evaluate(right, interpreter, globals)?;
 
@@ -363,7 +364,7 @@ impl Scope {
 
                 Ok(Value::Nil)
             },
-            Expr::Logical { left, operator, right, index } => {
+            Expr::Logical { left, operator, right, index : _ } => {
                 let left = self.evaluate(left, interpreter, globals)?;
 
                 // short circuiting
@@ -379,7 +380,7 @@ impl Scope {
 
                 self.evaluate(right, interpreter, globals)
             },
-            Expr::Call { callee, paren, args, index } => {
+            Expr::Call { callee, paren, args, index : _ } => {
                 let res = self.evaluate(callee, interpreter, globals);
 
                 match res {
@@ -390,10 +391,12 @@ impl Scope {
                             arguments.push(self.evaluate(arg, interpreter, globals)?);
                         }
 
-                        let Value::Function {
-                            params : _, body : _, closure_index : _
-                        } = callee else {
-                            return Err(NewError::Runtime("Callee is not a function", paren.clone()))
+                        match callee {
+                            Value::Function { params : _, body : _, closure_index: _ } | Value::Class(_)=> (),
+                            _ => {
+                                println!("Printing callee {:?}", callee);
+                                return Err(NewError::Runtime("Callee is not a function", paren.clone()))
+                            }
                         };
 
                         if arguments.len() != callee.arity() {
@@ -403,7 +406,7 @@ impl Scope {
                         callee.call(self, interpreter, &arguments, globals)
                     },
                     Err(_) => {
-                        if let Expr::Variable{token, index} = &**callee {
+                        if let Expr::Variable{token, index : _} = &**callee {
                             let Some(callable) = globals.get(&token.lexeme) else {
                                 return Err(Runtime("Incorrect number of arguments were passed to this function", paren.clone()))
                             };
@@ -415,6 +418,29 @@ impl Scope {
                     }
                 }
             },
+            Expr::Get { object, name, index : _ } => {
+                let value = self.evaluate(object, interpreter, globals)?;
+
+                match value {
+                    Value::Instance(instance) => {
+                        return instance.borrow().get(name)
+                    },
+                    _ => Err(Runtime("Only instances have properties", name.clone()))
+                }
+            },
+            Expr::Set { object, name, value, index : _ } => {
+                let object = self.evaluate(object, interpreter, globals)?;
+
+                let Value::Instance(instance) = object else {
+                    return Err(Runtime("Only instances have fields", name.clone()))
+                };
+
+                let value = self.evaluate(value, interpreter, globals)?;
+
+                instance.borrow_mut().set(name, &value);
+
+                Ok(value)
+            }
             _=> panic!("Unknown error occured")
         }
     }
@@ -424,7 +450,7 @@ impl Scope {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone)]
 pub enum Stmt {
     Print(Expr),
     Expression(Expr),
@@ -450,6 +476,10 @@ pub enum Stmt {
     Return {
         keyword : Token,
         value : Option<Expr>
+    },
+    Class {
+        name : Token,
+        methods : Vec<Stmt>
     }
 }
 

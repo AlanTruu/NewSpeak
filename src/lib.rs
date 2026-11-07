@@ -54,6 +54,7 @@ pub mod grammar;
 pub mod parser;
 pub mod statement;
 pub mod resolver;
+pub mod class;
 
 pub mod interpreter_utils {
     use std::path::PathBuf;
