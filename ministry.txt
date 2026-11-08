@@ -2,8 +2,36 @@ class Ministry {
     func work() {
         return "2+2";
     }
+
+    func plus() {
+        return this.first + this.second;
+    }
+
+    func init() {
+    }
+}
+
+class Printer {
+    func combine() {
+        return this.other + " "  +  this.one;
+    }
 }
 
 var love = Ministry();
-love.room = 101;
-ministry.work();
+var true = Ministry();
+redact love;
+redact love.work();
+
+love.first = 101;
+love.second = 102;
+
+true.first = 33;
+true.second = 34;
+
+redact love.plus();
+redact true.plus();
+
+var printer = Printer();
+printer.other = "Alan";
+printer.one = "Truong";
+redact printer.combine();

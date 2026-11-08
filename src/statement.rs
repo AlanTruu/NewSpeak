@@ -167,8 +167,7 @@ impl Interpreter {
                 Value::Nil
             },
             Stmt::Function { name, params, body } => {
-
-                let func = Value::Function{params: params.clone(), body : body.clone(), closure_index : scope.get_current_scope().index};
+                let func = Value::Function {params: params.clone(), body : body.clone(), closure_index : scope.get_current_scope().index, this : None, is_init : false};
 
                 scope.define(&name.lexeme, func.clone());
 
@@ -200,7 +199,17 @@ impl Interpreter {
                         panic!("Not a method")
                     };
 
-                    let value = self.execute(method, scope, globals);
+                    let mut init = false;
+
+                    if name.lexeme == "init" {
+                        init = true;
+                    }
+
+                    let mut value = self.execute(method, scope, globals);
+
+                    if let Value::Function { params : _, body : _, closure_index : _, this : _, is_init} = &mut value {
+                        *is_init = init;
+                    };
 
                     methods_map.insert(name.lexeme.clone(), value);
                 }
@@ -337,7 +346,7 @@ impl Scope {
                     }
                 }
             },
-            Expr::Variable{token, index} => {
+            Expr::Variable {token, index} => {
                 // println!("Looking for variable expression: {}", v);
                 let dist_or_none = interpreter.look_up_var(index);
 
@@ -392,7 +401,7 @@ impl Scope {
                         }
 
                         match callee {
-                            Value::Function { params : _, body : _, closure_index: _ } | Value::Class(_)=> (),
+                            Value::Function { params : _, body : _, closure_index: _, this : _ , is_init : _} | Value::Class(_)=> (),
                             _ => {
                                 println!("Printing callee {:?}", callee);
                                 return Err(NewError::Runtime("Callee is not a function", paren.clone()))
@@ -422,8 +431,8 @@ impl Scope {
                 let value = self.evaluate(object, interpreter, globals)?;
 
                 match value {
-                    Value::Instance(instance) => {
-                        return instance.borrow().get(name)
+                    Value::Instance(_) => {
+                        return value.get(name)
                     },
                     _ => Err(Runtime("Only instances have properties", name.clone()))
                 }
@@ -440,6 +449,15 @@ impl Scope {
                 instance.borrow_mut().set(name, &value);
 
                 Ok(value)
+            },
+            Expr::This { keyword, index } => {
+                if let Some(depth) = interpreter.look_up_var(index) && let Some(val) = self.get_at(*depth, "this") {
+                    return Ok(val.clone())
+                } else {
+                    return Err(Runtime("Could not find 'this'", keyword.clone()))
+                }
+
+
             }
             _=> panic!("Unknown error occured")
         }

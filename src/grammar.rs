@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::cell::RefCell;
 use crate::class::{ClassInstance, NsClass};
+use crate::grammar::Value::Instance;
 use crate::statement::{Scope, Stmt};
 use crate::{interpreter_utils::NewError, lex::Token};
 use crate::statement::{NewSpeakCallable, Interpreter};
@@ -56,6 +57,10 @@ pub enum Expr {
         name : Token,
         value : Box<Expr>,
         index : usize
+    },
+    This {
+        keyword : Token,
+        index : usize
     }
 }
 
@@ -69,37 +74,88 @@ pub enum Value {
     Function {
         params : Vec<Token>,
         body : Vec<Stmt>,
-        closure_index : usize
+        closure_index : usize,
+        this : Option<Rc<RefCell<ClassInstance>>>,
+        is_init : bool
     },
     ReturnVal(Box<Value>),
     Class(NsClass),
     Instance(Rc<RefCell<ClassInstance>>)
 }
 
+impl Value {
+    pub fn bind(&self, instance : &Rc<RefCell<ClassInstance>>) -> Value {
+        match self {
+            Value::Function { params, body, closure_index, this : None, is_init } => {
+                Value::Function { params : params.clone(), body : body.clone(), closure_index : *closure_index, this: Some(Rc::clone(instance)), is_init : *is_init }
+            },
+            _ => panic!("Cannot call bind on a non-function value")
+        }
+    }
+
+    pub fn get(&self, name : &Token) -> Result<Value, NewError> {
+        match self {
+            Instance(instance) => {
+                if let Some(value) = instance.borrow().fields.get(&name.lexeme) {
+                    return Ok(value.clone())
+                } else if let Some(func) = instance.borrow().class.find_method(&name.lexeme) {
+                    let method = func.bind(instance);
+                    Ok(method)
+                }
+                else {
+                    Err(NewError::Runtime("Undefined property" , name.clone()))
+                }
+            }
+            _=> panic!("Cannot call get on a non class instance")
+        }
+    }
+
+    pub fn set(&self, name : &Token, value : &Value) {
+        match self {
+            Instance(instance) => {
+                instance.borrow_mut().set(name, value);
+            }
+            _=> panic!("Cannot call get on a non class instance")
+        }
+    }
+}
+
 impl NewSpeakCallable for Value {
     fn call(&self, env : &mut Scope, i : &mut Interpreter, arguments : &[Value], globals : &HashMap<String, Box<dyn NewSpeakCallable>>) -> Result<Value, NewError> {
         match self {
-            Value::Function { params, body, closure_index } => {
+            Value::Function { params, body, closure_index, this, is_init } => {
                 let mut new_scope = Scope::from(&env.environments[..=*closure_index]);
+
+                if let Some(instance) = this {
+                    new_scope.define("this", Value::Instance(Rc::clone(instance)));
+                }
 
                 for i in 0..params.len() {
                     new_scope.define(&params[i].lexeme, arguments[i].clone());
                 }
 
-                match i.interpret(body, &mut new_scope, globals) {
-                    Value::ReturnVal(value) => {
-                        return Ok(*value)
-                    },
-                    _ => ()
+                if let Value::ReturnVal(value) = i.interpret(body, &mut new_scope, globals) {
+                    if *is_init {
+                        return Ok(new_scope.get_at(*closure_index, "this").unwrap().clone());
+                    }
+
+                    return Ok(*value)
                 }
 
+                if *is_init {
+                    return Ok(new_scope.get_at(*closure_index, "this").unwrap().clone())
+                }
 
                 Ok(Value::Nil)
             },
             Value::Class(class) => {
-                let instance = ClassInstance::new(class);
+                let instance = Rc::new(RefCell::new(ClassInstance::new(class)));
 
-                Ok(Value::Instance(Rc::new(RefCell::new(instance))))
+                if let Some(val) = class.find_method("init") {
+                    return Ok(val.bind(&instance).call(env, i, arguments, globals)?)
+                }
+
+                Ok(Value::Instance(instance))
             }
             _ => panic!()
         }
@@ -107,7 +163,14 @@ impl NewSpeakCallable for Value {
 
     fn arity(&self) -> usize {
         match self {
-            Value::Function { params, body : _, closure_index: _ } => params.len(),
+            Value::Function { params, body : _, closure_index: _, this : _, is_init : _ } => params.len(),
+            Value::Class(class) => {
+                let Some(init) = class.find_method("init") else {
+                    return 0
+                };
+
+                init.arity()
+            }
             _=> 0
         }
     }

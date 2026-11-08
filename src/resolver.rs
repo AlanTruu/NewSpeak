@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use crate::interpreter_utils::NewError;
+use crate::interpreter_utils::NewError::{self, Runtime};
 use crate::statement::{Interpreter, Stmt};
 use crate::grammar::{Expr};
 use crate::lex::Token;
@@ -8,13 +8,21 @@ use crate::lex::Token;
 pub enum FunctionType {
     Func,
     NaF,
-    Method
+    Method,
+    Init
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum ClassType {
+    NaC,
+    Class
 }
 
 pub struct Resolver<'a> {
     scopes : Vec<HashMap<String, bool>>,
     interpreter : &'a mut Interpreter,
-    current_func : FunctionType
+    current_func : FunctionType,
+    current_class : ClassType
 }
 
 impl <'a>Resolver<'a> {
@@ -22,7 +30,8 @@ impl <'a>Resolver<'a> {
         Self {
             scopes : vec![HashMap::new()],
             current_func : FunctionType::NaF,
-            interpreter
+            interpreter,
+            current_class : ClassType::NaC
         }
     }
 
@@ -68,6 +77,8 @@ impl <'a>Resolver<'a> {
             Stmt::Return { keyword , value } => {
                 if let FunctionType::NaF = self.current_func {
                     return Err(NewError::Runtime("Cannot return from top-level code", keyword.clone()))
+                } else if let FunctionType::Init = self.current_func {
+                    return Err(NewError::Runtime("Can't return a value from an initializer", keyword.clone()))
                 }
 
                 if let Some(val) = value {
@@ -79,18 +90,34 @@ impl <'a>Resolver<'a> {
                 self.resolve_statement(body)?;
             },
             Stmt::Print(val) => {
-                // println!("resolving print with expression: {:?} \n", val);
                 self.resolve_expr(val)?;
             },
             Stmt::Class { name, methods } => {
+                let enclosing_class = self.current_class;
+                self.current_class = ClassType::Class;
+
                 self.declare(name)?;
                 self.define(name);
 
+                self.scopes.last_mut().unwrap().insert("this".to_string(), true);
+
                 for method in methods {
-                    let declaration = FunctionType::Method;
+
+
+                    let Stmt::Function { name, params : _, body : _ } = method else {
+                        panic!("Not a method")
+                    };
+
+                    let declaration = if name.lexeme == "init" {
+                        FunctionType::Init
+                    } else {
+                        FunctionType::Method
+                    };
 
                     self.resolve_function(method, declaration)?;
                 }
+
+                self.current_class = enclosing_class;
             }
         }
 
@@ -168,6 +195,13 @@ impl <'a>Resolver<'a> {
             Expr::Set { object, name : _, value, index : _ } => {
                 self.resolve_expr(value)?;
                 self.resolve_expr(object)?;
+            },
+            Expr::This { keyword, index } => {
+                if let ClassType::NaC = self.current_class {
+                    return Err(Runtime("Can't use 'this' outside of a class", keyword.clone()))
+                }
+
+                self.resolve_local(&keyword.lexeme, *index);
             }
         }
 

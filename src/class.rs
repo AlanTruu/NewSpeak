@@ -1,4 +1,6 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 use crate::grammar::Value;
 use crate::interpreter_utils::NewError;
 use crate::lex::Token;
@@ -21,15 +23,15 @@ impl NsClass {
         &self.name
     }
 
-    fn find_method(&self, name : &str) -> Option<&Value> {
+    pub fn find_method(&self, name : &str) -> Option<&Value> {
         self.methods.get(name)
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct ClassInstance {
-    class : NsClass,
-    fields : HashMap<String, Value>
+    pub class : NsClass,
+    pub fields : HashMap<String, Value>
 }
 
 impl ClassInstance {
@@ -42,16 +44,6 @@ impl ClassInstance {
 
     pub fn to_string(&self) -> String {
         format!("{} instance", self.class.to_string())
-    }
-
-    pub fn get(&self, name : &Token) -> Result<Value, NewError> {
-        if let Some(value) = self.fields.get(&name.lexeme) {
-            return Ok(value.clone())
-        } else if let Some(value) = self.class.find_method(&name.lexeme){
-            return Ok(value.clone())
-        } else {
-            Err(NewError::Runtime("Undefined property" , name.clone()))
-        }
     }
 
     pub fn set(&mut self, name : &Token, value : &Value) {

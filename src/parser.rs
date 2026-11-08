@@ -584,7 +584,8 @@ impl Parser {
                 TokenType::Nil => Expr::Literal{value : Value::Nil, index : self.index},
                 TokenType::Number(n) => Expr::Literal{value : Value::Number(n.to_owned()), index: self.index},
                 TokenType::String(s) => Expr::Literal{value : Value::String(s.to_owned()), index : self.index},
-                TokenType::Identifier(_) => Expr::Variable{token, index : self.index} ,
+                TokenType::Identifier(_) => Expr::Variable{token, index : self.index},
+                TokenType::This => Expr::This { keyword : token, index : self.index },
                 TokenType::LeftParen => {
                     let expr = self.expression().inspect_err(|e| {
                         if let NewError::Parse(msg, t) = e {
