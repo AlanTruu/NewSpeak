@@ -50,6 +50,17 @@ impl Parser {
             return Err(NewError::Parse("Expected class name", class_token))
         };
 
+        let super_class = if let Some(token) = self.tokens.next_if(|token| if let TokenType::Less = token.t {true} else {false}) {
+            let Some(sup) = self.tokens.next_if(|token| if let TokenType::Identifier(_) = token.t {true} else {false}) else {
+                return Err(NewError::Parse("Expected superclass name after '<'", token))
+            };
+
+            self.index += 1;
+            Some(Expr::Variable { token : sup, index: self.index })
+        } else {
+            None
+        };
+
         let Some(left_brace_token) = self.tokens.next_if(|token| if let TokenType::LeftBrace = token.t {true} else {false}) else {
             return Err(NewError::Parse("Expected '{' before class body", class_token))
         };
@@ -70,10 +81,10 @@ impl Parser {
             return Err(NewError::Parse("Expected '}' after class body", left_brace_token))
         };
 
-        Ok(Stmt::Class { name, methods })
+        Ok(Stmt::Class { name, methods, super_class })
     }
 
-    fn function(&mut self, kind : &str) -> Result<Stmt, NewError> {
+    fn function(&mut self, _kind : &str) -> Result<Stmt, NewError> {
         // Consume func keyword
         let func_token = self.tokens.next().unwrap();
 
@@ -373,7 +384,7 @@ impl Parser {
             let val = self.assignment()?;
 
             match expr {
-                Expr::Variable { token, index }=> {
+                Expr::Variable { token, index } => {
                     self.index += 1;
                     Ok(Expr::Assign { name : token, val : Box::new(val), index })
                 },
@@ -586,6 +597,21 @@ impl Parser {
                 TokenType::String(s) => Expr::Literal{value : Value::String(s.to_owned()), index : self.index},
                 TokenType::Identifier(_) => Expr::Variable{token, index : self.index},
                 TokenType::This => Expr::This { keyword : token, index : self.index },
+                TokenType::Super => {
+                    println!("In super");
+
+                    let Some(_dot_token) = self.tokens.next_if(|tok| if let TokenType::Dot = tok.t {true} else {false}) else {
+                        return Err(NewError::Parse("Expected '.' after 'super'", token))
+                    };
+
+                    let Some(method) = self.tokens.next_if(|token| if let TokenType::Identifier(_) = token.t {true} else {false}) else {
+                        return Err(NewError::Parse("Expected identifier after '.'", token))
+                    };
+
+                    self.index += 1;
+                    Expr::Super { keyword: token, method, index: self.index }
+
+                },
                 TokenType::LeftParen => {
                     let expr = self.expression().inspect_err(|e| {
                         if let NewError::Parse(msg, t) = e {

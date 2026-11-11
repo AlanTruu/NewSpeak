@@ -1,21 +1,20 @@
-use std::cell::RefCell;
 use std::collections::HashMap;
-use std::rc::Rc;
 use crate::grammar::Value;
-use crate::interpreter_utils::NewError;
 use crate::lex::Token;
 
 #[derive(Debug, Clone)]
 pub struct NsClass {
     name : String,
-    methods : HashMap<String, Value>
+    methods : HashMap<String, Value>,
+    super_class : Option<Box<NsClass>>
 }
 
 impl NsClass {
-    pub fn new(name : &str, methods : HashMap<String, Value>) -> Self {
+    pub fn new(name : &str, methods : HashMap<String, Value>, super_class : Option<NsClass>) -> Self {
         Self {
             name : name.to_string(),
-            methods
+            methods,
+            super_class : if let Some(class) = super_class {Some(Box::new(class))} else {None}
         }
     }
 
@@ -24,7 +23,13 @@ impl NsClass {
     }
 
     pub fn find_method(&self, name : &str) -> Option<&Value> {
-        self.methods.get(name)
+        let sub = self.methods.get(name);
+
+        if let Some(ref class) = self.super_class {
+            return class.find_method(name)
+        }
+
+        sub
     }
 }
 

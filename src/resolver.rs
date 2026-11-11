@@ -92,18 +92,28 @@ impl <'a>Resolver<'a> {
             Stmt::Print(val) => {
                 self.resolve_expr(val)?;
             },
-            Stmt::Class { name, methods } => {
+            Stmt::Class { name, methods, super_class } => {
                 let enclosing_class = self.current_class;
                 self.current_class = ClassType::Class;
 
                 self.declare(name)?;
                 self.define(name);
 
+                if let Some(super_class) = super_class {
+                    if let Expr::Variable { token, index : _ } = super_class {
+                        if token.lexeme == name.lexeme {
+                            return Err(NewError::Parse("A class can't inherit from itself", token.clone()))
+                        }
+
+                        self.scopes.last_mut().unwrap().insert("super".to_string(), true);
+                    }
+
+                    self.resolve_expr(super_class)?;
+                }
+
                 self.scopes.last_mut().unwrap().insert("this".to_string(), true);
 
                 for method in methods {
-
-
                     let Stmt::Function { name, params : _, body : _ } = method else {
                         panic!("Not a method")
                     };
@@ -150,14 +160,12 @@ impl <'a>Resolver<'a> {
 
     fn resolve_expr(&mut self, expr : &Expr) -> Result<(), NewError> {
         match expr {
-            Expr::Variable{token, index } => {
+            Expr::Variable{ token, index } => {
                 if !self.scopes.is_empty() && let Some(boo) = self.scopes.last().unwrap().get(&token.lexeme)  {
                     if !boo {
                         return Err(NewError::Parse("Can't read local variable in its own initializer", token.clone()))
                     }
                 }
-
-                // println!("In resolve_expr with expr {:?}", expr);
 
                 self.resolve_local(&token.lexeme, *index);
             },
@@ -201,6 +209,9 @@ impl <'a>Resolver<'a> {
                     return Err(Runtime("Can't use 'this' outside of a class", keyword.clone()))
                 }
 
+                self.resolve_local(&keyword.lexeme, *index);
+            },
+            Expr::Super { keyword, method, index } => {
                 self.resolve_local(&keyword.lexeme, *index);
             }
         }

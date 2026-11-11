@@ -189,7 +189,20 @@ impl Interpreter {
 
                 Value::Nil
             },
-            Stmt::Class { name, methods } => {
+            Stmt::Class { name, methods, super_class } => {
+                let super_class = if let Some(super_class) = super_class {
+                    let Ok(Value::Class(class)) = scope.evaluate(super_class, self, globals) else {
+                        panic!("Superclass must be a class")
+                    };
+
+                    scope.define("super", Value::Class(class.clone()));
+
+                    Some(class)
+                } else {
+                    None
+                };
+
+
                 scope.define(&name.lexeme, Value::Nil);
 
                 let mut methods_map : HashMap<String, Value> = HashMap::new();
@@ -214,7 +227,7 @@ impl Interpreter {
                     methods_map.insert(name.lexeme.clone(), value);
                 }
 
-                let class = NsClass::new(&name.lexeme, methods_map);
+                let class = NsClass::new(&name.lexeme, methods_map, super_class);
                 let class = Value::Class(class);
                 scope.define(&name.lexeme, class);
                 Value::Nil
@@ -456,8 +469,27 @@ impl Scope {
                 } else {
                     return Err(Runtime("Could not find 'this'", keyword.clone()))
                 }
+            },
+            Expr::Super { keyword, method, index } => {
+                println!("In super ");
 
+                if let Some(depth) = interpreter.look_up_var(index) && let Some(val) = self.get_at(*depth, "super") {
+                    let Some(this) = self.get_at(*depth, "this") else {
+                        return Err(Runtime("Could not find instance", keyword.clone()))
+                    };
 
+                    if let Value::Instance(instance) = this {
+                        let super_method = val.get(method)?;
+
+                        return Ok(super_method.bind(instance))
+                    } else {
+                        print!("What is this: {:?}", this);
+                    }
+
+                    return Ok(val.clone())
+                } else {
+                    return Err(Runtime("Could not invoke super method", keyword.clone()))
+                }
             }
             _=> panic!("Unknown error occured")
         }
@@ -497,7 +529,8 @@ pub enum Stmt {
     },
     Class {
         name : Token,
-        methods : Vec<Stmt>
+        methods : Vec<Stmt>,
+        super_class : Option<Expr>
     }
 }
 

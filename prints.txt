@@ -4,7 +4,6 @@ redact truth;
 var num_1 = 6;
 var num_2;
 num_2 = 7;
-var num_2 = 8;
 redact num_1 + num_2;
 redact thoughtCrime and truth;
 redact nil or "yes";

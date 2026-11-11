@@ -7,8 +7,18 @@ class Ministry {
         return this.first + this.second;
     }
 
-    func init() {
+    func init(first, second) {
+        this.first = first;
+        this.second = second;
     }
+}
+
+class Defunct < Ministry {
+    func thang() {
+        redact super.plus();
+        return "WORKING";
+    }
+
 }
 
 class Printer {
@@ -17,16 +27,10 @@ class Printer {
     }
 }
 
-var love = Ministry();
-var true = Ministry();
+var love = Ministry(101, 102);
+var true = Ministry(33, 34);
+var defunct = Defunct(34, 35);
 redact love;
-redact love.work();
-
-love.first = 101;
-love.second = 102;
-
-true.first = 33;
-true.second = 34;
 
 redact love.plus();
 redact true.plus();
@@ -35,3 +39,6 @@ var printer = Printer();
 printer.other = "Alan";
 printer.one = "Truong";
 redact printer.combine();
+
+redact defunct.plus();
+redact defunct.thang();

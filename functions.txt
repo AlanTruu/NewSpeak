@@ -22,7 +22,7 @@ func loop(max) {
 }
 
 func noth() {
-    return "noth";
+    return "noth!!!";
 }
 
 loop(100);

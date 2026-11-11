@@ -61,6 +61,11 @@ pub enum Expr {
     This {
         keyword : Token,
         index : usize
+    },
+    Super {
+        keyword : Token,
+        method : Token,
+        index : usize
     }
 }
 
@@ -93,6 +98,8 @@ impl Value {
         }
     }
 
+    /// Get function for Value type.
+    /// If self is a class Instance and name refers to a class method, the instance binds to the method enabling the use of 'this' in the method body.
     pub fn get(&self, name : &Token) -> Result<Value, NewError> {
         match self {
             Instance(instance) => {
