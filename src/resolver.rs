@@ -206,7 +206,7 @@ impl <'a>Resolver<'a> {
 
                 self.resolve_local(&keyword.lexeme, *index);
             },
-            Expr::Super { keyword, method, index } => {
+            Expr::Super { keyword, method : _, index } => {
                 self.resolve_local(&keyword.lexeme, *index);
             }
         }
