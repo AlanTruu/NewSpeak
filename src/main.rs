@@ -9,9 +9,7 @@ use new_speak::{interpreter_utils::{self, NewError, error, get_globals, get_rese
 use std::collections::HashMap;
 use std::time::Instant;
 
-
 fn main() {
-
     let args : Vec<String>  = env::args().collect();
 
     if args.len() == 1 {

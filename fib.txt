@@ -1,0 +1,12 @@
+func fib(n) {
+    on (n < 2) return n;
+
+    return fib(n-1) + fib(n-2);
+
+}
+
+var before = time();
+redact fib(40);
+var after = time();
+
+redact after - before;

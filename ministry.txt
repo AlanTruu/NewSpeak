@@ -41,4 +41,3 @@ printer.one = "Truong";
 redact printer.combine();
 
 redact defunct.plus();
-redact defunct.thang();

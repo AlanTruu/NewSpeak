@@ -598,8 +598,6 @@ impl Parser {
                 TokenType::Identifier(_) => Expr::Variable{token, index : self.index},
                 TokenType::This => Expr::This { keyword : token, index : self.index },
                 TokenType::Super => {
-                    println!("In super");
-
                     let Some(_dot_token) = self.tokens.next_if(|tok| if let TokenType::Dot = tok.t {true} else {false}) else {
                         return Err(NewError::Parse("Expected '.' after 'super'", token))
                     };

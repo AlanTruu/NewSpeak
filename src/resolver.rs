@@ -135,8 +135,6 @@ impl <'a>Resolver<'a> {
     }
 
     fn resolve_function(&mut self, stmt : &Stmt, func_type : FunctionType) -> Result<(), NewError> {
-        // self.begin_scope();
-
         match stmt {
             Stmt::Function { name : _, params, body } => {
                 let func = self.current_func;
@@ -152,9 +150,6 @@ impl <'a>Resolver<'a> {
             },
             _ => panic!("Not a function")
         }
-
-        // self.end_scope();
-
         Ok(())
     }
 
@@ -219,6 +214,7 @@ impl <'a>Resolver<'a> {
         Ok(())
     }
 
+    /// Binds expressions to the nearest name that comes before.
     fn resolve_local(&mut self, name : &str, index : usize) {
         for (i, scope) in self.scopes.iter().enumerate().rev() {
             if scope.contains_key(name) {

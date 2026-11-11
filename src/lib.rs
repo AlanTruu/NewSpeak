@@ -118,6 +118,7 @@ pub mod interpreter_utils {
         eprintln!("[line {}] Error {}: {}", line, location, message);
     }
 
+    /// Builds a map of global values such as FFI function time.
     pub fn get_globals() -> HashMap<String, Box<dyn NewSpeakCallable>> {
         let mut globals = HashMap::new();
 
@@ -126,6 +127,7 @@ pub mod interpreter_utils {
         globals
     }
 
+    /// Buids a map of reserved words. String literals match to the corresponding TokenType.
     pub fn get_reserved() -> HashMap<&'static str, TokenType> {
         let mut reserved : HashMap<&str, TokenType> = HashMap::new();
         reserved.insert("and", TokenType::And);
@@ -148,4 +150,6 @@ pub mod interpreter_utils {
 
         reserved
     }
+
+    pub fn start() {}
 }
